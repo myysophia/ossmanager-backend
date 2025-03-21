@@ -1,8 +1,8 @@
 package middleware
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
-	"github.com/myysophia/ossmanager-backend/internal/auth"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
@@ -16,7 +16,7 @@ func PermissionMiddleware(requiredPermissions ...string) gin.HandlerFunc {
 		// 从上下文获取用户ID
 		userID, exists := c.Get("userID")
 		if !exists {
-			utils.Error(c, utils.CodeUnauthorized, "未登录")
+			utils.ResponseError(c, utils.CodeUnauthorized, errors.New("未登录"))
 			c.Abort()
 			return
 		}
@@ -25,13 +25,13 @@ func PermissionMiddleware(requiredPermissions ...string) gin.HandlerFunc {
 		hasPermission, err := checkPermissions(userID.(uint), requiredPermissions...)
 		if err != nil {
 			logger.Error("检查权限失败", zap.Error(err))
-			utils.Error(c, utils.CodeInternalError, "检查权限失败")
+			utils.ResponseError(c, utils.CodeInternalError, errors.New("检查权限失败"))
 			c.Abort()
 			return
 		}
 
 		if !hasPermission {
-			utils.Error(c, utils.CodeForbidden, "没有权限执行此操作")
+			utils.ResponseError(c, utils.CodeForbidden, errors.New("没有权限执行此操作"))
 			c.Abort()
 			return
 		}
@@ -46,7 +46,7 @@ func RoleMiddleware(requiredRoles ...string) gin.HandlerFunc {
 		// 从上下文获取用户ID
 		userID, exists := c.Get("userID")
 		if !exists {
-			utils.Error(c, utils.CodeUnauthorized, "未登录")
+			utils.ResponseError(c, utils.CodeUnauthorized, errors.New("未登录"))
 			c.Abort()
 			return
 		}
@@ -55,13 +55,13 @@ func RoleMiddleware(requiredRoles ...string) gin.HandlerFunc {
 		hasRole, err := checkRoles(userID.(uint), requiredRoles...)
 		if err != nil {
 			logger.Error("检查角色失败", zap.Error(err))
-			utils.Error(c, utils.CodeInternalError, "检查角色失败")
+			utils.ResponseError(c, utils.CodeInternalError, errors.New("检查角色失败"))
 			c.Abort()
 			return
 		}
 
 		if !hasRole {
-			utils.Error(c, utils.CodeForbidden, "没有权限执行此操作")
+			utils.ResponseError(c, utils.CodeForbidden, errors.New("没有权限执行此操作"))
 			c.Abort()
 			return
 		}
@@ -98,7 +98,7 @@ func checkPermissions(userID uint, permissions ...string) (bool, error) {
 	// 转换为权限代码集合，方便查找
 	permissionMap := make(map[string]bool)
 	for _, perm := range userPermissions {
-		permissionMap[perm.Code] = true
+		permissionMap[perm.Name] = true
 	}
 
 	// 检查是否拥有所有指定权限
@@ -132,7 +132,7 @@ func checkRoles(userID uint, roles ...string) (bool, error) {
 	// 转换为角色代码集合，方便查找
 	roleMap := make(map[string]bool)
 	for _, role := range userRoles {
-		roleMap[role.Code] = true
+		roleMap[role.Name] = true
 	}
 
 	// 检查是否拥有所有指定角色

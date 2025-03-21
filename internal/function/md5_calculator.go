@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
-	"github.com/aliyun/fc-runtime-go-sdk/fc"
 	"github.com/myysophia/ossmanager-backend/internal/config"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
@@ -190,9 +189,9 @@ func (c *MD5Calculator) calculateFileMD5(file *models.OSSFile) {
 
 	// 转换为十六进制字符串
 	md5Str := hex.EncodeToString(hash.Sum(nil))
-	logger.Info("文件MD5计算完成", 
-		zap.Uint("id", file.ID), 
-		zap.String("object_key", file.ObjectKey), 
+	logger.Info("文件MD5计算完成",
+		zap.Uint("id", file.ID),
+		zap.String("object_key", file.ObjectKey),
 		zap.String("md5", md5Str))
 
 	// 更新MD5
@@ -286,10 +285,7 @@ func CalculateOSSFileMD5(ctx context.Context, event OSSEvent) (string, error) {
 // calculateMD5FromOSS 从OSS读取文件并计算MD5值
 func calculateMD5FromOSS(ctx context.Context, bucketName, objectKey string) (string, error) {
 	// 获取OSS配置
-	cfg, err := config.LoadAliyunOSSConfig()
-	if err != nil {
-		return "", fmt.Errorf("加载阿里云OSS配置失败: %w", err)
-	}
+	cfg := config.GetConfig().OSS.AliyunOSS
 
 	// 创建OSS客户端
 	client, err := oss.New(cfg.Endpoint, cfg.AccessKeyID, cfg.AccessKeySecret)
@@ -325,14 +321,14 @@ func calculateMD5FromOSS(ctx context.Context, bucketName, objectKey string) (str
 
 // updateFileMD5InDB 更新数据库中文件的MD5值
 func updateFileMD5InDB(ctx context.Context, bucketName, objectKey, md5Value string) error {
-	// 初始化数据库连接
-	database, err := db.InitDB()
-	if err != nil {
-		return fmt.Errorf("初始化数据库连接失败: %w", err)
+	// 获取数据库连接
+	database := db.GetDB()
+	if database == nil {
+		return fmt.Errorf("数据库连接未初始化")
 	}
 
 	// 更新文件记录的MD5值
-	result := database.Model(&db.Models.OSSFile{}).
+	result := database.Model(&models.OSSFile{}).
 		Where("bucket = ? AND object_key = ?", bucketName, objectKey).
 		Update("md5", md5Value)
 
@@ -354,11 +350,12 @@ func (c *MD5Calculator) HandleManualRequest(ctx context.Context, req MD5Calculat
 	if err := db.GetDB().First(&file, req.FileID).Error; err != nil {
 		return fmt.Errorf("获取文件信息失败: %w", err)
 	}
-	
+
 	return c.CalculateMD5Sync(&file)
 }
 
 // 注册函数计算处理函数
-func init() {
-	fc.RegisterHandler(CalculateOSSFileMD5)
-} 
+// 注意：此功能已被Serverless计算平台替代，不再使用RegisterHandler
+// func init() {
+// 	fc.RegisterHandler(CalculateOSSFileMD5)
+// }

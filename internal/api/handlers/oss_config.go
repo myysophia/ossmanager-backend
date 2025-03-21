@@ -1,11 +1,11 @@
 package handlers
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
-	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"strconv"
 )
@@ -38,11 +38,7 @@ func (h *OSSConfigHandler) CreateConfig(c *gin.Context) {
 		return
 	}
 
-	// 设置创建者
-	user, _ := c.Get("user")
-	if userModel, ok := user.(*models.User); ok {
-		config.CreatedBy = userModel.ID
-	}
+	// OSSConfig没有CreatedBy字段，不需要设置
 
 	if err := db.GetDB().Create(&config).Error; err != nil {
 		h.InternalError(c, "创建存储配置失败")
@@ -63,12 +59,12 @@ func (h *OSSConfigHandler) UpdateConfig(c *gin.Context) {
 	}
 
 	var updateData struct {
-		Name      string `json:"name" binding:"required"`
-		Type      string `json:"type" binding:"required"`
-		Endpoint  string `json:"endpoint" binding:"required"`
-		Bucket    string `json:"bucket" binding:"required"`
-		AccessKey string `json:"access_key" binding:"required"`
-		SecretKey string `json:"secret_key" binding:"required"`
+		Name        string `json:"name" binding:"required"`
+		StorageType string `json:"storage_type" binding:"required"`
+		Endpoint    string `json:"endpoint" binding:"required"`
+		Bucket      string `json:"bucket" binding:"required"`
+		AccessKey   string `json:"access_key" binding:"required"`
+		SecretKey   string `json:"secret_key" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&updateData); err != nil {
@@ -77,14 +73,14 @@ func (h *OSSConfigHandler) UpdateConfig(c *gin.Context) {
 	}
 
 	// 验证配置类型
-	if !isValidStorageType(updateData.Type) {
+	if !isValidStorageType(updateData.StorageType) {
 		h.BadRequest(c, "不支持的存储类型")
 		return
 	}
 
 	// 更新配置
 	config.Name = updateData.Name
-	config.Type = updateData.Type
+	config.StorageType = updateData.StorageType
 	config.Endpoint = updateData.Endpoint
 	config.Bucket = updateData.Bucket
 	config.AccessKey = updateData.AccessKey
@@ -115,7 +111,7 @@ func (h *OSSConfigHandler) DeleteConfig(c *gin.Context) {
 		return
 	}
 	if count > 0 {
-		h.Error(c, utils.CodeConfigInUse, "存储配置正在使用中，无法删除")
+		h.Error(c, utils.CodeInvalidParams, "存储配置正在使用中，无法删除")
 		return
 	}
 
@@ -217,13 +213,13 @@ func isValidStorageType(storageType string) bool {
 func (h *OSSConfigHandler) Test(c *gin.Context) {
 	var config models.OSSConfig
 	if err := c.ShouldBindJSON(&config); err != nil {
-		utils.Error(c, utils.CodeInvalidParams, "参数错误", err)
+		h.BadRequest(c, "参数错误")
 		return
 	}
 
 	// 验证配置类型
 	if !isValidStorageType(config.StorageType) {
-		utils.Error(c, utils.CodeInvalidParams, "不支持的存储类型", nil)
+		h.BadRequest(c, "不支持的存储类型")
 		return
 	}
 
@@ -234,7 +230,7 @@ func (h *OSSConfigHandler) Test(c *gin.Context) {
 	// 4. 删除测试文件
 	// 5. 返回测试结果
 
-	utils.Success(c, gin.H{
+	h.Success(c, gin.H{
 		"message": "存储配置测试成功",
 	})
 }

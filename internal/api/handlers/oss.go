@@ -5,8 +5,6 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
-	"io"
-	"mime/multipart"
 	"path"
 	"strconv"
 	"time"
@@ -74,12 +72,17 @@ func (h *OSSHandler) UploadFile(c *gin.Context) {
 
 	// 保存文件记录
 	ossFile := models.OSSFile{
-		Filename:     filename,
-		OriginalName: file.Filename,
-		Size:         file.Size,
-		MimeType:     file.Header.Get("Content-Type"),
-		URL:          url,
-		StorageType:  storageType,
+		Filename:         filename,
+		OriginalFilename: file.Filename,
+		FileSize:         file.Size,
+		StorageType:      storageType,
+		Bucket:           service.GetBucketName(),
+		ObjectKey:        filename,
+		DownloadURL:      url,
+		UploaderID:       getUserID(c),
+		UploadIP:         c.ClientIP(),
+		Status:           "ACTIVE",
+		ConfigID:         getConfigID(storageType),
 	}
 
 	if err := db.GetDB().Create(&ossFile).Error; err != nil {
@@ -176,12 +179,17 @@ func (h *OSSHandler) CompleteMultipartUpload(c *gin.Context) {
 
 	// 保存文件记录
 	ossFile := models.OSSFile{
-		Filename:     req.Filename,
-		OriginalName: req.Filename,
-		Size:         size,
-		MimeType:     "application/octet-stream", // 这里应该根据实际情况设置
-		URL:          url,
-		StorageType:  storageType,
+		Filename:         req.Filename,
+		OriginalFilename: req.Filename,
+		FileSize:         size,
+		StorageType:      storageType,
+		Bucket:           service.GetBucketName(),
+		ObjectKey:        req.Filename,
+		DownloadURL:      url,
+		UploaderID:       getUserID(c),
+		UploadIP:         c.ClientIP(),
+		Status:           "ACTIVE",
+		ConfigID:         getConfigID(storageType),
 	}
 
 	if err := db.GetDB().Create(&ossFile).Error; err != nil {
@@ -252,7 +260,7 @@ func (h *OSSHandler) GetFileList(c *gin.Context) {
 
 	// 按文件名搜索
 	if keyword := c.Query("keyword"); keyword != "" {
-		query = query.Where("filename LIKE ? OR original_name LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+		query = query.Where("filename LIKE ? OR original_filename LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
 	}
 
 	// 获取总数
@@ -296,7 +304,7 @@ func (h *OSSHandler) DeleteFile(c *gin.Context) {
 	}
 
 	// 删除文件
-	if err := service.DeleteObject(file.Filename); err != nil {
+	if err := service.DeleteObject(file.ObjectKey); err != nil {
 		h.InternalError(c, "删除文件失败")
 		return
 	}
@@ -340,7 +348,7 @@ func (h *OSSHandler) GenerateDownloadURL(c *gin.Context) {
 		}
 	}
 
-	url, expires, err := service.GenerateDownloadURL(file.Filename, expiration)
+	url, expires, err := service.GenerateDownloadURL(file.ObjectKey, expiration)
 	if err != nil {
 		h.InternalError(c, "生成下载URL失败")
 		return
@@ -356,4 +364,23 @@ func (h *OSSHandler) GenerateDownloadURL(c *gin.Context) {
 func generateFilename(originalName string) string {
 	ext := path.Ext(originalName)
 	return time.Now().Format("20060102150405") + ext
+}
+
+// getUserID 从上下文中获取用户ID
+func getUserID(c *gin.Context) uint {
+	userID, exists := c.Get("userID")
+	if !exists {
+		return 0
+	}
+	if uid, ok := userID.(uint); ok {
+		return uid
+	}
+	return 0
+}
+
+// getConfigID 根据存储类型获取配置ID
+func getConfigID(storageType string) uint {
+	// 这里应该查询数据库获取对应存储类型的配置ID
+	// 简化处理，返回一个默认值
+	return 1
 }

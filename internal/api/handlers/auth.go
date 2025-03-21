@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
+	"github.com/myysophia/ossmanager-backend/internal/auth"
+	"github.com/myysophia/ossmanager-backend/internal/config"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
@@ -23,12 +26,14 @@ type RegisterRequest struct {
 
 // AuthHandler 认证处理器
 type AuthHandler struct {
-	db *db.DB
+	*BaseHandler
 }
 
 // NewAuthHandler 创建认证处理器
-func NewAuthHandler(db *db.DB) *AuthHandler {
-	return &AuthHandler{db: db}
+func NewAuthHandler() *AuthHandler {
+	return &AuthHandler{
+		BaseHandler: NewBaseHandler(),
+	}
 }
 
 // Login 用户登录
@@ -39,29 +44,30 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error(c, utils.CodeInvalidParams, "参数错误", err)
+		utils.ResponseError(c, utils.CodeInvalidParams, err)
 		return
 	}
 
 	var user models.User
-	if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
-		utils.Error(c, utils.CodeUserNotFound, "用户不存在", nil)
+	if err := db.GetDB().Where("username = ?", req.Username).First(&user).Error; err != nil {
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("用户名或密码错误"))
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		utils.Error(c, utils.CodeInvalidPassword, "密码错误", nil)
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("用户名或密码错误"))
 		return
 	}
 
 	// 生成 JWT token
-	token, err := jwt.GenerateToken(user.ID, user.Username)
+	jwtConfig := config.GetConfig().JWT
+	token, err := auth.GenerateToken(&user, &jwtConfig)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "生成token失败", err)
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("生成令牌失败"))
 		return
 	}
 
-	utils.Success(c, gin.H{
+	utils.ResponseWithData(c, gin.H{
 		"token": token,
 		"user": gin.H{
 			"id":       user.ID,
@@ -80,25 +86,25 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error(c, utils.CodeInvalidParams, "参数错误", err)
+		utils.ResponseError(c, utils.CodeInvalidParams, errors.New("参数错误"))
 		return
 	}
 
 	// 检查用户名是否已存在
 	var count int64
-	if err := h.db.Model(&models.User{}).Where("username = ?", req.Username).Count(&count).Error; err != nil {
-		utils.Error(c, utils.CodeServerError, "检查用户名失败", err)
+	if err := db.GetDB().Model(&models.User{}).Where("username = ?", req.Username).Count(&count).Error; err != nil {
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("检查用户名失败"))
 		return
 	}
 	if count > 0 {
-		utils.Error(c, utils.CodeUserExists, "用户名已存在", nil)
+		utils.ResponseError(c, utils.CodeInvalidParams, errors.New("用户名已存在"))
 		return
 	}
 
 	// 加密密码
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "密码加密失败", err)
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("密码加密失败"))
 		return
 	}
 
@@ -109,41 +115,46 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		Email:    req.Email,
 	}
 
-	if err := h.db.Create(&user).Error; err != nil {
-		utils.Error(c, utils.CodeServerError, "创建用户失败", err)
+	if err := db.GetDB().Create(&user).Error; err != nil {
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("创建用户失败"))
 		return
 	}
 
 	// 分配默认角色
 	var defaultRole models.Role
-	if err := h.db.Where("name = ?", "user").First(&defaultRole).Error; err != nil {
-		utils.Error(c, utils.CodeServerError, "获取默认角色失败", err)
+	if err := db.GetDB().Where("name = ?", "user").First(&defaultRole).Error; err != nil {
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("获取默认角色失败"))
 		return
 	}
 
-	if err := h.db.Model(&user).Association("Roles").Append(&defaultRole); err != nil {
-		utils.Error(c, utils.CodeServerError, "分配角色失败", err)
+	if err := db.GetDB().Model(&user).Association("Roles").Append(&defaultRole); err != nil {
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("分配角色失败"))
 		return
 	}
 
-	utils.Success(c, gin.H{
+	utils.ResponseWithData(c, gin.H{
 		"id":       user.ID,
 		"username": user.Username,
 		"email":    user.Email,
 	})
 }
 
-// GetUserInfo 获取用户信息
-func (h *AuthHandler) GetUserInfo(c *gin.Context) {
-	userID := utils.GetUserID(c)
-
-	var user models.User
-	if err := h.db.Preload("Roles").First(&user, userID).Error; err != nil {
-		utils.Error(c, utils.CodeUserNotFound, "用户不存在", nil)
+// GetCurrentUser 获取当前用户信息
+func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
+	// 从上下文获取用户ID
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.ResponseError(c, utils.CodeUnauthorized, errors.New("未登录"))
 		return
 	}
 
-	utils.Success(c, gin.H{
+	var user models.User
+	if err := db.GetDB().Preload("Roles").First(&user, userID).Error; err != nil {
+		utils.ResponseError(c, utils.CodeNotFound, errors.New("用户不存在"))
+		return
+	}
+
+	utils.ResponseWithData(c, gin.H{
 		"id":       user.ID,
 		"username": user.Username,
 		"email":    user.Email,
@@ -159,34 +170,39 @@ func (h *AuthHandler) UpdatePassword(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error(c, utils.CodeInvalidParams, "参数错误", err)
+		utils.ResponseError(c, utils.CodeInvalidParams, errors.New("参数错误"))
 		return
 	}
 
-	userID := utils.GetUserID(c)
+	// 从上下文获取用户ID
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.ResponseError(c, utils.CodeUnauthorized, errors.New("未登录"))
+		return
+	}
 
 	var user models.User
-	if err := h.db.First(&user, userID).Error; err != nil {
-		utils.Error(c, utils.CodeUserNotFound, "用户不存在", nil)
+	if err := db.GetDB().First(&user, userID).Error; err != nil {
+		utils.ResponseError(c, utils.CodeNotFound, errors.New("用户不存在"))
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
-		utils.Error(c, utils.CodeInvalidPassword, "原密码错误", nil)
+		utils.ResponseError(c, utils.CodeInvalidParams, errors.New("原密码错误"))
 		return
 	}
 
 	// 加密新密码
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "密码加密失败", err)
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("密码加密失败"))
 		return
 	}
 
-	if err := h.db.Model(&user).Update("password", string(hashedPassword)).Error; err != nil {
-		utils.Error(c, utils.CodeServerError, "更新密码失败", err)
+	if err := db.GetDB().Model(&user).Update("password", string(hashedPassword)).Error; err != nil {
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("更新密码失败"))
 		return
 	}
 
-	utils.Success(c, nil)
+	utils.ResponseWithData(c, nil)
 }

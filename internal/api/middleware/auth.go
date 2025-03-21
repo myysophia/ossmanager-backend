@@ -8,6 +8,7 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"go.uber.org/zap"
 	"strings"
+	"errors"
 )
 
 // AuthMiddleware 认证中间件
@@ -16,7 +17,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// 从请求头获取 JWT 令牌
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			utils.Error(c, utils.CodeUnauthorized, "未提供认证令牌")
+			utils.ResponseError(c, utils.CodeUnauthorized, errors.New("未提供认证令牌"))
 			c.Abort()
 			return
 		}
@@ -24,7 +25,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// 检查 Authorization 头格式
 		parts := strings.SplitN(authHeader, " ", 2)
 		if !(len(parts) == 2 && parts[0] == "Bearer") {
-			utils.Error(c, utils.CodeUnauthorized, "认证令牌格式错误")
+			utils.ResponseError(c, utils.CodeUnauthorized, errors.New("认证令牌格式错误"))
 			c.Abort()
 			return
 		}
@@ -40,7 +41,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		claims, err := auth.ParseToken(parts[1], jwtConfig)
 		if err != nil {
 			logger.Warn("解析JWT令牌失败", zap.Error(err))
-			utils.Error(c, utils.CodeUnauthorized, "无效的认证令牌")
+			utils.ResponseError(c, utils.CodeUnauthorized, errors.New("无效的认证令牌"))
 			c.Abort()
 			return
 		}

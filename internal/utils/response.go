@@ -22,6 +22,12 @@ const (
 	CodeForbidden     = 403 // 禁止访问
 	CodeNotFound      = 404 // 资源不存在
 	CodeInternalError = 500 // 服务器内部错误
+	
+	// OSS相关状态码
+	CodeServerError    = 50001 // 服务器错误
+	CodeConfigNotFound = 40404 // 配置不存在
+	CodeFileNotFound   = 40405 // 文件不存在
+	CodeConfigInUse    = 40001 // 配置正在使用中
 )
 
 // 对应的消息
@@ -32,6 +38,12 @@ var codeMsgMap = map[int]string{
 	CodeForbidden:     "禁止访问",
 	CodeNotFound:      "资源不存在",
 	CodeInternalError: "服务器内部错误",
+	
+	// OSS相关状态码消息
+	CodeServerError:    "服务器错误",
+	CodeConfigNotFound: "存储配置不存在",
+	CodeFileNotFound:   "文件不存在",
+	CodeConfigInUse:    "配置正在使用中",
 }
 
 // ResponseWithJSON 返回JSON响应
@@ -123,4 +135,27 @@ func ResponseNotFound(c *gin.Context, err error) {
 // ResponseInternalError 返回服务器内部错误响应
 func ResponseInternalError(c *gin.Context, err error) {
 	ResponseError(c, CodeInternalError, err)
+}
+
+// GetUserID 从上下文中获取用户ID
+func GetUserID(c *gin.Context) uint {
+	// 从上下文中获取用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		return 0
+	}
+	
+	// 尝试转换为uint
+	switch v := userID.(type) {
+	case uint:
+		return v
+	case float64:
+		return uint(v)
+	case int:
+		return uint(v)
+	case int64:
+		return uint(v)
+	default:
+		return 0
+	}
 }

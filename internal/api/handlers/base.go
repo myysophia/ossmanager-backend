@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 )
@@ -17,35 +18,35 @@ func NewBaseHandler() *BaseHandler {
 
 // Success 成功响应
 func (h *BaseHandler) Success(c *gin.Context, data interface{}) {
-	utils.Success(c, data)
+	utils.ResponseWithData(c, data)
 }
 
 // Error 错误响应
 func (h *BaseHandler) Error(c *gin.Context, code int, message string) {
-	utils.Error(c, code, message)
+	utils.ResponseError(c, code, errors.New(message))
 }
 
 // BadRequest 请求参数错误
 func (h *BaseHandler) BadRequest(c *gin.Context, message string) {
-	utils.Error(c, utils.CodeBadRequest, message)
+	utils.ResponseError(c, utils.CodeInvalidParams, errors.New(message))
 }
 
 // Unauthorized 未授权
 func (h *BaseHandler) Unauthorized(c *gin.Context, message string) {
-	utils.Error(c, utils.CodeUnauthorized, message)
+	utils.ResponseError(c, utils.CodeUnauthorized, errors.New(message))
 }
 
 // Forbidden 禁止访问
 func (h *BaseHandler) Forbidden(c *gin.Context, message string) {
-	utils.Error(c, utils.CodeForbidden, message)
+	utils.ResponseError(c, utils.CodeForbidden, errors.New(message))
 }
 
 // NotFound 资源不存在
 func (h *BaseHandler) NotFound(c *gin.Context, message string) {
-	utils.Error(c, utils.CodeNotFound, message)
+	utils.ResponseError(c, utils.CodeNotFound, errors.New(message))
 }
 
 // InternalError 内部错误
 func (h *BaseHandler) InternalError(c *gin.Context, message string) {
-	utils.Error(c, utils.CodeInternalError, message)
+	utils.ResponseError(c, utils.CodeInternalError, errors.New(message))
 }

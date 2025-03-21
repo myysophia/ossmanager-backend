@@ -23,7 +23,7 @@ func SetupRouter(storageFactory *oss.DefaultStorageFactory, md5Calculator *funct
 
 	// 创建处理器
 	authHandler := handlers.NewAuthHandler()
-	ossHandler := handlers.NewOSSHandler(storageFactory)
+	ossFileHandler := handlers.NewOSSFileHandler(storageFactory)
 	ossConfigHandler := handlers.NewOSSConfigHandler(storageFactory)
 	md5Handler := handlers.NewMD5Handler(md5Calculator)
 
@@ -46,15 +46,15 @@ func SetupRouter(storageFactory *oss.DefaultStorageFactory, md5Calculator *funct
 		authorized.GET("/user/current", authHandler.GetCurrentUser)
 
 		// OSS文件管理
-		authorized.POST("/oss/files", ossHandler.UploadFile)
-		authorized.GET("/oss/files", ossHandler.GetFileList)
-		authorized.DELETE("/oss/files/:id", ossHandler.DeleteFile)
-		authorized.GET("/oss/files/:id/download", ossHandler.GenerateDownloadURL)
+		authorized.POST("/oss/files", ossFileHandler.Upload)
+		authorized.GET("/oss/files", ossFileHandler.List)
+		authorized.DELETE("/oss/files/:id", ossFileHandler.Delete)
+		authorized.GET("/oss/files/:id/download", ossFileHandler.GetDownloadURL)
 
 		// 分片上传
-		authorized.POST("/oss/multipart/init", ossHandler.InitMultipartUpload)
-		authorized.POST("/oss/multipart/complete", ossHandler.CompleteMultipartUpload)
-		authorized.DELETE("/oss/multipart/abort", ossHandler.AbortMultipartUpload)
+		authorized.POST("/oss/multipart/init", ossFileHandler.InitMultipartUpload)
+		authorized.POST("/oss/multipart/complete", ossFileHandler.CompleteMultipartUpload)
+		authorized.DELETE("/oss/multipart/abort", ossFileHandler.AbortMultipartUpload)
 
 		// MD5计算相关
 		authorized.POST("/oss/files/:id/md5", md5Handler.TriggerCalculation)

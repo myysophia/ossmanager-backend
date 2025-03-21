@@ -1,24 +1,24 @@
 package handlers
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
-	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"path/filepath"
 	"strconv"
 )
 
 type OSSFileHandler struct {
-	db             *db.DB
+	*BaseHandler
 	storageFactory *oss.StorageFactory
 }
 
-func NewOSSFileHandler(db *db.DB, storageFactory *oss.StorageFactory) *OSSFileHandler {
+func NewOSSFileHandler(storageFactory *oss.StorageFactory) *OSSFileHandler {
 	return &OSSFileHandler{
-		db:             db,
+		BaseHandler:    NewBaseHandler(),
 		storageFactory: storageFactory,
 	}
 }
@@ -27,27 +27,27 @@ func NewOSSFileHandler(db *db.DB, storageFactory *oss.StorageFactory) *OSSFileHa
 func (h *OSSFileHandler) Upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		utils.Error(c, utils.CodeInvalidParams, "获取文件失败", err)
+		h.Error(c, utils.CodeInvalidParams, "获取文件失败")
 		return
 	}
 
 	// 获取存储配置
 	configID := c.PostForm("config_id")
 	if configID == "" {
-		utils.Error(c, utils.CodeInvalidParams, "存储配置ID不能为空", nil)
+		h.Error(c, utils.CodeInvalidParams, "存储配置ID不能为空")
 		return
 	}
 
 	var config models.OSSConfig
-	if err := h.db.First(&config, configID).Error; err != nil {
-		utils.Error(c, utils.CodeConfigNotFound, "存储配置不存在", nil)
+	if err := db.GetDB().First(&config, configID).Error; err != nil {
+		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
 		return
 	}
 
 	// 获取存储服务
 	storage, err := h.storageFactory.GetStorage(config.Type)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "获取存储服务失败", err)
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
@@ -58,28 +58,31 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	// 上传文件
 	uploadURL, err := storage.Upload(c.Request.Context(), objectKey, file)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "上传文件失败", err)
+		h.Error(c, utils.CodeServerError, "上传文件失败")
 		return
 	}
 
 	// 保存文件记录
 	ossFile := models.OSSFile{
-		ConfigID:   config.ID,
-		ConfigName: config.Name,
-		ObjectKey:  objectKey,
-		FileName:   file.Filename,
-		FileSize:   file.Size,
-		FileType:   file.Header.Get("Content-Type"),
-		UploadURL:  uploadURL,
-		CreatedBy:  utils.GetUserID(c),
+		ConfigID:          config.ID,
+		Filename:          objectKey,
+		OriginalFilename:  file.Filename,
+		FileSize:          file.Size,
+		StorageType:       config.StorageType,
+		Bucket:            config.Bucket,
+		ObjectKey:         objectKey,
+		DownloadURL:       uploadURL,
+		UploaderID:        utils.GetUserID(c),
+		UploadIP:          c.ClientIP(),
+		Status:            "ACTIVE",
 	}
 
-	if err := h.db.Create(&ossFile).Error; err != nil {
-		utils.Error(c, utils.CodeServerError, "保存文件记录失败", err)
+	if err := db.GetDB().Create(&ossFile).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "保存文件记录失败")
 		return
 	}
 
-	utils.Success(c, ossFile)
+	h.Success(c, ossFile)
 }
 
 // InitMultipartUpload 初始化分片上传
@@ -90,19 +93,19 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error(c, utils.CodeInvalidParams, "参数错误", err)
+		h.Error(c, utils.CodeInvalidParams, "参数错误")
 		return
 	}
 
 	var config models.OSSConfig
-	if err := h.db.First(&config, req.ConfigID).Error; err != nil {
-		utils.Error(c, utils.CodeConfigNotFound, "存储配置不存在", nil)
+	if err := db.GetDB().First(&config, req.ConfigID).Error; err != nil {
+		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
 		return
 	}
 
 	storage, err := h.storageFactory.GetStorage(config.Type)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "获取存储服务失败", err)
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
@@ -111,11 +114,11 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 
 	uploadID, err := storage.InitMultipartUpload(c.Request.Context(), objectKey)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "初始化分片上传失败", err)
+		h.Error(c, utils.CodeServerError, "初始化分片上传失败")
 		return
 	}
 
-	utils.Success(c, gin.H{
+	h.Success(c, gin.H{
 		"upload_id":  uploadID,
 		"object_key": objectKey,
 	})
@@ -131,44 +134,56 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error(c, utils.CodeInvalidParams, "参数错误", err)
+		h.Error(c, utils.CodeInvalidParams, "参数错误")
 		return
 	}
 
 	var config models.OSSConfig
-	if err := h.db.First(&config, req.ConfigID).Error; err != nil {
-		utils.Error(c, utils.CodeConfigNotFound, "存储配置不存在", nil)
+	if err := db.GetDB().First(&config, req.ConfigID).Error; err != nil {
+		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
 		return
 	}
 
 	storage, err := h.storageFactory.GetStorage(config.Type)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "获取存储服务失败", err)
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
 	downloadURL, err := storage.CompleteMultipartUpload(c.Request.Context(), req.ObjectKey, req.UploadID, req.Parts)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "完成分片上传失败", err)
+		h.Error(c, utils.CodeServerError, "完成分片上传失败")
+		return
+	}
+
+	// 获取文件大小
+	fileSize, err := storage.GetObjectInfo(c.Request.Context(), req.ObjectKey)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "获取文件信息失败")
 		return
 	}
 
 	// 保存文件记录
 	ossFile := models.OSSFile{
-		ConfigID:   config.ID,
-		ConfigName: config.Name,
-		ObjectKey:  req.ObjectKey,
-		FileName:   filepath.Base(req.ObjectKey),
-		UploadURL:  downloadURL,
-		CreatedBy:  utils.GetUserID(c),
+		ConfigID:          config.ID,
+		Filename:          req.ObjectKey,
+		OriginalFilename:  req.ObjectKey,
+		FileSize:          fileSize,
+		StorageType:       config.StorageType,
+		Bucket:            config.Bucket,
+		ObjectKey:         req.ObjectKey,
+		DownloadURL:       downloadURL,
+		UploaderID:        utils.GetUserID(c),
+		UploadIP:          c.ClientIP(),
+		Status:            "ACTIVE",
 	}
 
-	if err := h.db.Create(&ossFile).Error; err != nil {
-		utils.Error(c, utils.CodeServerError, "保存文件记录失败", err)
+	if err := db.GetDB().Create(&ossFile).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "保存文件记录失败")
 		return
 	}
 
-	utils.Success(c, ossFile)
+	h.Success(c, ossFile)
 }
 
 // AbortMultipartUpload 取消分片上传
@@ -180,28 +195,28 @@ func (h *OSSFileHandler) AbortMultipartUpload(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error(c, utils.CodeInvalidParams, "参数错误", err)
+		h.Error(c, utils.CodeInvalidParams, "参数错误")
 		return
 	}
 
 	var config models.OSSConfig
-	if err := h.db.First(&config, req.ConfigID).Error; err != nil {
-		utils.Error(c, utils.CodeConfigNotFound, "存储配置不存在", nil)
+	if err := db.GetDB().First(&config, req.ConfigID).Error; err != nil {
+		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
 		return
 	}
 
 	storage, err := h.storageFactory.GetStorage(config.Type)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "获取存储服务失败", err)
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
 	if err := storage.AbortMultipartUpload(c.Request.Context(), req.ObjectKey, req.UploadID); err != nil {
-		utils.Error(c, utils.CodeServerError, "取消分片上传失败", err)
+		h.Error(c, utils.CodeServerError, "取消分片上传失败")
 		return
 	}
 
-	utils.Success(c, nil)
+	h.Success(c, nil)
 }
 
 // List 获取文件列表
@@ -210,24 +225,24 @@ func (h *OSSFileHandler) List(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	configID := c.Query("config_id")
 
-	query := h.db.Model(&models.OSSFile{})
+	query := db.GetDB().Model(&models.OSSFile{})
 	if configID != "" {
 		query = query.Where("config_id = ?", configID)
 	}
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		utils.Error(c, utils.CodeServerError, "获取文件总数失败", err)
+		h.Error(c, utils.CodeServerError, "获取文件总数失败")
 		return
 	}
 
 	var files []models.OSSFile
 	if err := query.Offset((page - 1) * pageSize).Limit(pageSize).Find(&files).Error; err != nil {
-		utils.Error(c, utils.CodeServerError, "获取文件列表失败", err)
+		h.Error(c, utils.CodeServerError, "获取文件列表失败")
 		return
 	}
 
-	utils.Success(c, gin.H{
+	h.Success(c, gin.H{
 		"total": total,
 		"items": files,
 	})
@@ -238,34 +253,34 @@ func (h *OSSFileHandler) Delete(c *gin.Context) {
 	fileID := c.Param("id")
 
 	var file models.OSSFile
-	if err := h.db.First(&file, fileID).Error; err != nil {
-		utils.Error(c, utils.CodeFileNotFound, "文件不存在", nil)
+	if err := db.GetDB().First(&file, fileID).Error; err != nil {
+		h.Error(c, utils.CodeFileNotFound, "文件不存在")
 		return
 	}
 
 	var config models.OSSConfig
-	if err := h.db.First(&config, file.ConfigID).Error; err != nil {
-		utils.Error(c, utils.CodeConfigNotFound, "存储配置不存在", nil)
+	if err := db.GetDB().First(&config, file.ConfigID).Error; err != nil {
+		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
 		return
 	}
 
 	storage, err := h.storageFactory.GetStorage(config.Type)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "获取存储服务失败", err)
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
 	if err := storage.DeleteObject(c.Request.Context(), file.ObjectKey); err != nil {
-		utils.Error(c, utils.CodeServerError, "删除文件失败", err)
+		h.Error(c, utils.CodeServerError, "删除文件失败")
 		return
 	}
 
-	if err := h.db.Delete(&file).Error; err != nil {
-		utils.Error(c, utils.CodeServerError, "删除文件记录失败", err)
+	if err := db.GetDB().Delete(&file).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "删除文件记录失败")
 		return
 	}
 
-	utils.Success(c, nil)
+	h.Success(c, nil)
 }
 
 // GetDownloadURL 获取文件下载链接
@@ -273,30 +288,30 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 	fileID := c.Param("id")
 
 	var file models.OSSFile
-	if err := h.db.First(&file, fileID).Error; err != nil {
-		utils.Error(c, utils.CodeFileNotFound, "文件不存在", nil)
+	if err := db.GetDB().First(&file, fileID).Error; err != nil {
+		h.Error(c, utils.CodeFileNotFound, "文件不存在")
 		return
 	}
 
 	var config models.OSSConfig
-	if err := h.db.First(&config, file.ConfigID).Error; err != nil {
-		utils.Error(c, utils.CodeConfigNotFound, "存储配置不存在", nil)
+	if err := db.GetDB().First(&config, file.ConfigID).Error; err != nil {
+		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
 		return
 	}
 
 	storage, err := h.storageFactory.GetStorage(config.Type)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "获取存储服务失败", err)
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
 	downloadURL, err := storage.GenerateDownloadURL(c.Request.Context(), file.ObjectKey)
 	if err != nil {
-		utils.Error(c, utils.CodeServerError, "生成下载链接失败", err)
+		h.Error(c, utils.CodeServerError, "生成下载链接失败")
 		return
 	}
 
-	utils.Success(c, gin.H{
+	h.Success(c, gin.H{
 		"download_url": downloadURL,
 	})
 }
