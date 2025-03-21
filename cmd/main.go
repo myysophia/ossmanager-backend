@@ -19,13 +19,18 @@ import (
 
 func main() {
 	// 加载配置
-	cfg, err := config.LoadConfig("configs")
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "dev" // 默认开发环境
+	}
+	cfg, err := config.LoadConfigWithEnv("configs", env)
+
 	if err != nil {
 		panic(fmt.Sprintf("加载配置失败: %v", err))
 	}
 
 	// 初始化日志系统
-	if err := logger.Init(&cfg.Log); err != nil {
+	if err := logger.InitLogger(&cfg.Log); err != nil {
 		panic(fmt.Sprintf("初始化日志系统失败: %v", err))
 	}
 	defer logger.Sync()

@@ -4,4 +4,5 @@
 .DS_Store
 .venv/
 .pytest_cache/
-configs
+configs/
+logs

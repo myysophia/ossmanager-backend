@@ -42,14 +42,14 @@ func Init(cfg *config.DatabaseConfig) error {
 	sqlDB.SetConnMaxLifetime(cfg.GetConnMaxLifetime())
 
 	// 自动迁移数据库表
-	if err := autoMigrate(); err != nil {
-		return fmt.Errorf("数据库迁移失败: %w", err)
-	}
+	//if err := autoMigrate(); err != nil {
+	//	return fmt.Errorf("数据库迁移失败: %w", err)
+	//}
 
 	// 初始化基础数据
-	if err := initBaseData(); err != nil {
-		return fmt.Errorf("初始化基础数据失败: %w", err)
-	}
+	//if err := initBaseData(); err != nil {
+	//	return fmt.Errorf("初始化基础数据失败: %w", err)
+	//}
 
 	logger.Info("数据库初始化成功")
 	return nil

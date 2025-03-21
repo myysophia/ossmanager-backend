@@ -1,0 +1,24 @@
+aliyun_oss:
+  access_key_id: "your-access-key-id"
+  access_key_secret: "your-access-key-secret"
+  endpoint: "oss-cn-hangzhou.aliyuncs.com"
+  bucket: "your-bucket-name"
+  region: "cn-hangzhou"
+  upload_dir: "uploads/"
+  url_expire_time: 3600  # 1 hour in seconds
+
+aws_s3:
+  access_key_id: "your-aws-access-key-id"
+  secret_access_key: "your-aws-secret-access-key"
+  region: "us-east-1"
+  bucket: "your-s3-bucket-name"
+  upload_dir: "uploads/"
+  url_expire_time: 3600
+
+cloudflare_r2:
+  account_id: "your-account-id"
+  access_key_id: "your-r2-access-key-id"
+  secret_access_key: "your-r2-secret-access-key"
+  bucket: "your-r2-bucket-name"
+  upload_dir: "uploads/"
+  url_expire_time: 3600
