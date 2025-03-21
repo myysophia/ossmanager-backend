@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 )
 
 // BaseHandler 基础处理器
@@ -48,4 +48,4 @@ func (h *BaseHandler) NotFound(c *gin.Context, message string) {
 // InternalError 内部错误
 func (h *BaseHandler) InternalError(c *gin.Context, message string) {
 	response.Error(c, response.CodeInternalError, message)
-} 
+}

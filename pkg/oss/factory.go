@@ -2,10 +2,10 @@ package oss
 
 import (
 	"fmt"
-	"github.com/ninesun/ossmanager-backend/pkg/config"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/db/models"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/config"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -82,14 +82,14 @@ func (f *DefaultStorageFactory) GetDefaultStorageService() (StorageService, erro
 	err := gormDB.Where("is_default = ?", true).First(&ossConfig).Error
 	if err != nil {
 		logger.Error("从数据库获取默认OSS配置失败", zap.Error(err))
-		
+
 		// 降级为使用配置文件中的阿里云OSS
 		logger.Info("降级为使用配置文件中的阿里云OSS作为默认存储")
 		return f.GetStorageService(StorageTypeAliyunOSS)
 	}
 
 	f.defaultConfig = &ossConfig
-	
+
 	// 根据配置创建存储服务
 	var service StorageService
 	switch ossConfig.StorageType {
@@ -117,4 +117,4 @@ func (f *DefaultStorageFactory) ClearCache() {
 	defer f.lock.Unlock()
 	f.serviceCache = make(map[string]StorageService)
 	f.defaultConfig = nil
-} 
+}

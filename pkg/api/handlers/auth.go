@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/jwt"
-	"github.com/ninesun/ossmanager-backend/pkg/models"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
-	"github.com/ninesun/ossmanager-backend/pkg/utils"
+	"github.com/myysophia/ossmanager-backend/pkg/auth/jwt"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/utils"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -191,4 +191,4 @@ func (h *AuthHandler) UpdatePassword(c *gin.Context) {
 	}
 
 	response.Success(c, nil)
-} 
+}

@@ -2,9 +2,9 @@ package db
 
 import (
 	"fmt"
-	"github.com/ninesun/ossmanager-backend/pkg/config"
-	"github.com/ninesun/ossmanager-backend/pkg/db/models"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/config"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
@@ -15,7 +15,7 @@ var db *gorm.DB
 // Init 初始化数据库连接
 func Init(cfg *config.DatabaseConfig) error {
 	var err error
-	
+
 	// 配置 GORM
 	gormConfig := &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
@@ -125,4 +125,4 @@ func initBaseData() error {
 	}
 
 	return nil
-} 
+}

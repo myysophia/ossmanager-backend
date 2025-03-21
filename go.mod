@@ -1,4 +1,4 @@
-module github.com/ninesun/ossmanager-backend
+module github.com/myysophia/ossmanager-backend
 
 go 1.24.1
 
@@ -56,4 +56,21 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/postgres v1.5.11 // indirect
 	gorm.io/gorm v1.25.12 // indirect
+)
+
+replace (
+	github.com/myysophia/ossmanager-backend/pkg/api => ./pkg/api
+	github.com/myysophia/ossmanager-backend/pkg/api/handlers => ./pkg/api/handlers
+	github.com/myysophia/ossmanager-backend/pkg/api/middleware => ./pkg/api/middleware
+	github.com/myysophia/ossmanager-backend/pkg/auth => ./pkg/auth
+	github.com/myysophia/ossmanager-backend/pkg/auth/jwt => ./pkg/auth
+	github.com/myysophia/ossmanager-backend/pkg/config => ./pkg/config
+	github.com/myysophia/ossmanager-backend/pkg/db => ./pkg/db
+	github.com/myysophia/ossmanager-backend/pkg/db/models => ./pkg/db/models
+	github.com/myysophia/ossmanager-backend/pkg/function => ./pkg/function
+	github.com/myysophia/ossmanager-backend/pkg/logger => ./pkg/logger
+	github.com/myysophia/ossmanager-backend/pkg/oss => ./pkg/oss
+	github.com/myysophia/ossmanager-backend/pkg/tests/mocks => ./pkg/tests/mocks
+	github.com/myysophia/ossmanager-backend/pkg/utils => ./pkg/utils
+	github.com/myysophia/ossmanager-backend/pkg/utils/response => ./pkg/utils
 )

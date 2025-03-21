@@ -8,8 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/ninesun/ossmanager-backend/pkg/config"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/config"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"io"
 	"path"
@@ -73,7 +73,7 @@ func (s *AWSS3Service) getObjectKey(filename string) string {
 // Upload 上传文件
 func (s *AWSS3Service) Upload(file io.Reader, objectKey string) (string, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 上传文件
 	_, err := s.client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket: aws.String(s.bucketName),
@@ -104,7 +104,7 @@ func (s *AWSS3Service) Upload(file io.Reader, objectKey string) (string, error) 
 // InitMultipartUpload 初始化分片上传
 func (s *AWSS3Service) InitMultipartUpload(filename string) (string, []string, error) {
 	objectKey := s.getObjectKey(filename)
-	
+
 	// 初始化分片上传
 	result, err := s.client.CreateMultipartUpload(context.Background(), &s3.CreateMultipartUploadInput{
 		Bucket: aws.String(s.bucketName),
@@ -124,7 +124,7 @@ func (s *AWSS3Service) InitMultipartUpload(filename string) (string, []string, e
 // CompleteMultipartUpload 完成分片上传
 func (s *AWSS3Service) CompleteMultipartUpload(uploadID string, parts []Part, objectKey string) (string, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 将我们的Part结构转换为AWS SDK的Part结构
 	awsParts := make([]types.CompletedPart, len(parts))
 	for i, part := range parts {
@@ -144,9 +144,9 @@ func (s *AWSS3Service) CompleteMultipartUpload(uploadID string, parts []Part, ob
 		},
 	})
 	if err != nil {
-		logger.Error("完成AWS S3分片上传失败", 
-			zap.String("objectKey", fullObjectKey), 
-			zap.String("uploadID", uploadID), 
+		logger.Error("完成AWS S3分片上传失败",
+			zap.String("objectKey", fullObjectKey),
+			zap.String("uploadID", uploadID),
 			zap.Error(err))
 		return "", fmt.Errorf("完成AWS S3分片上传失败: %w", err)
 	}
@@ -170,7 +170,7 @@ func (s *AWSS3Service) CompleteMultipartUpload(uploadID string, parts []Part, ob
 // AbortMultipartUpload 取消分片上传
 func (s *AWSS3Service) AbortMultipartUpload(uploadID string, objectKey string) error {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 取消分片上传
 	_, err := s.client.AbortMultipartUpload(context.Background(), &s3.AbortMultipartUploadInput{
 		Bucket:   aws.String(s.bucketName),
@@ -178,9 +178,9 @@ func (s *AWSS3Service) AbortMultipartUpload(uploadID string, objectKey string) e
 		UploadId: aws.String(uploadID),
 	})
 	if err != nil {
-		logger.Error("取消AWS S3分片上传失败", 
-			zap.String("objectKey", fullObjectKey), 
-			zap.String("uploadID", uploadID), 
+		logger.Error("取消AWS S3分片上传失败",
+			zap.String("objectKey", fullObjectKey),
+			zap.String("uploadID", uploadID),
 			zap.Error(err))
 		return fmt.Errorf("取消AWS S3分片上传失败: %w", err)
 	}
@@ -191,10 +191,10 @@ func (s *AWSS3Service) AbortMultipartUpload(uploadID string, objectKey string) e
 // GenerateDownloadURL 生成下载URL
 func (s *AWSS3Service) GenerateDownloadURL(objectKey string, expiration time.Duration) (string, time.Time, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 设置过期时间
 	expires := time.Now().Add(expiration)
-	
+
 	// 生成预签名URL
 	presignClient := s3.NewPresignClient(s.client)
 	presignResult, err := presignClient.PresignGetObject(context.Background(), &s3.GetObjectInput{
@@ -214,7 +214,7 @@ func (s *AWSS3Service) GenerateDownloadURL(objectKey string, expiration time.Dur
 // DeleteObject 删除对象
 func (s *AWSS3Service) DeleteObject(objectKey string) error {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 删除对象
 	_, err := s.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucketName),
@@ -231,7 +231,7 @@ func (s *AWSS3Service) DeleteObject(objectKey string) error {
 // GetObjectInfo 获取对象信息
 func (s *AWSS3Service) GetObjectInfo(objectKey string) (int64, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 获取对象信息
 	result, err := s.client.HeadObject(context.Background(), &s3.HeadObjectInput{
 		Bucket: aws.String(s.bucketName),
@@ -253,18 +253,18 @@ func (s *AWSS3Service) GetBucketName() string {
 // GetObject 获取对象内容
 func (s *AWSS3Service) GetObject(objectKey string) (io.ReadCloser, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	ctx := context.Background()
 	resp, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucketName),
 		Key:    aws.String(fullObjectKey),
 	})
-	
+
 	if err != nil {
 		logger.Error("获取AWS S3对象失败", zap.String("objectKey", fullObjectKey), zap.Error(err))
 		return nil, fmt.Errorf("获取AWS S3对象失败: %w", err)
 	}
-	
+
 	return resp.Body, nil
 }
 
@@ -274,9 +274,9 @@ func (s *AWSS3Service) TriggerMD5Calculation(objectKey string, fileID uint) erro
 		zap.String("objectKey", objectKey),
 		zap.Uint("fileID", fileID),
 		zap.String("bucket", s.bucketName))
-	
+
 	// AWS S3通常使用Lambda函数处理这类异步计算
 	// 此处只是记录日志，实际项目中需要集成AWS Lambda
 	logger.Warn("AWS S3暂不支持异步MD5计算，需要集成AWS Lambda实现")
 	return fmt.Errorf("AWS S3暂不支持异步MD5计算，需要集成AWS Lambda实现")
-} 
+}

@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"time"
 )
@@ -89,4 +89,4 @@ func recordAuditLog(c *gin.Context, userID uint, username, path, method string, 
 		}
 		db.GetDB().Create(&auditLog)
 	*/
-} 
+}

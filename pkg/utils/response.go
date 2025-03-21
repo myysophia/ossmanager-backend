@@ -2,7 +2,7 @@ package utils
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -88,9 +88,9 @@ func ResponseError(c *gin.Context, code int, err error) {
 	}
 
 	// 记录错误日志
-	logger.Error("API错误响应", 
-		zap.Int("code", code), 
-		zap.String("path", c.Request.URL.Path), 
+	logger.Error("API错误响应",
+		zap.Int("code", code),
+		zap.String("path", c.Request.URL.Path),
 		zap.String("method", c.Request.Method),
 		zap.String("message", msg))
 

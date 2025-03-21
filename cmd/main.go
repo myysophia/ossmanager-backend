@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/ninesun/ossmanager-backend/pkg/api"
-	"github.com/ninesun/ossmanager-backend/pkg/config"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/function"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
-	"github.com/ninesun/ossmanager-backend/pkg/oss/factory"
+	"github.com/myysophia/ossmanager-backend/pkg/api"
+	"github.com/myysophia/ossmanager-backend/pkg/config"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/function"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/oss/factory"
 	"go.uber.org/zap"
 	"net/http"
 	"os"
@@ -90,4 +90,4 @@ func main() {
 	}
 
 	logger.Info("服务器已安全关闭")
-} 
+}

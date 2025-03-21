@@ -2,9 +2,9 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/auth"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
+	"github.com/myysophia/ossmanager-backend/pkg/auth"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 	"go.uber.org/zap"
 	"strings"
 )
@@ -44,4 +44,4 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		c.Next()
 	}
-} 
+}

@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/db/models"
-	"github.com/ninesun/ossmanager-backend/pkg/oss"
-	"github.com/ninesun/ossmanager-backend/pkg/oss/factory"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/oss"
+	"github.com/myysophia/ossmanager-backend/pkg/oss/factory"
 	"io"
 	"mime/multipart"
 	"path"
@@ -75,12 +75,12 @@ func (h *OSSHandler) UploadFile(c *gin.Context) {
 
 	// 保存文件记录
 	ossFile := models.OSSFile{
-		Filename:    filename,
+		Filename:     filename,
 		OriginalName: file.Filename,
-		Size:        file.Size,
-		MimeType:    file.Header.Get("Content-Type"),
-		URL:         url,
-		StorageType: storageType,
+		Size:         file.Size,
+		MimeType:     file.Header.Get("Content-Type"),
+		URL:          url,
+		StorageType:  storageType,
 	}
 
 	if err := db.GetDB().Create(&ossFile).Error; err != nil {
@@ -133,8 +133,8 @@ func (h *OSSHandler) InitMultipartUpload(c *gin.Context) {
 // CompleteMultipartUpload 完成分片上传
 func (h *OSSHandler) CompleteMultipartUpload(c *gin.Context) {
 	var req struct {
-		UploadID string `json:"upload_id" binding:"required"`
-		Filename string `json:"filename" binding:"required"`
+		UploadID string     `json:"upload_id" binding:"required"`
+		Filename string     `json:"filename" binding:"required"`
 		Parts    []oss.Part `json:"parts" binding:"required"`
 	}
 
@@ -177,12 +177,12 @@ func (h *OSSHandler) CompleteMultipartUpload(c *gin.Context) {
 
 	// 保存文件记录
 	ossFile := models.OSSFile{
-		Filename:    req.Filename,
+		Filename:     req.Filename,
 		OriginalName: req.Filename,
-		Size:        size,
-		MimeType:    "application/octet-stream", // 这里应该根据实际情况设置
-		URL:         url,
-		StorageType: storageType,
+		Size:         size,
+		MimeType:     "application/octet-stream", // 这里应该根据实际情况设置
+		URL:          url,
+		StorageType:  storageType,
 	}
 
 	if err := db.GetDB().Create(&ossFile).Error; err != nil {
@@ -348,8 +348,8 @@ func (h *OSSHandler) GenerateDownloadURL(c *gin.Context) {
 	}
 
 	h.Success(c, gin.H{
-		"url":      url,
-		"expires":  expires,
+		"url":     url,
+		"expires": expires,
 	})
 }
 
@@ -357,4 +357,4 @@ func (h *OSSHandler) GenerateDownloadURL(c *gin.Context) {
 func generateFilename(originalName string) string {
 	ext := path.Ext(originalName)
 	return time.Now().Format("20060102150405") + ext
-} 
+}

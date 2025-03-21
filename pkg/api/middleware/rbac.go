@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/db/models"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 	"go.uber.org/zap"
 )
 
@@ -142,4 +142,4 @@ func checkRoles(userID uint, roles ...string) (bool, error) {
 	}
 
 	return true, nil
-} 
+}

@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/models"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
-	"github.com/ninesun/ossmanager-backend/pkg/utils"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/utils"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 	"strconv"
 )
 
@@ -55,10 +55,10 @@ func (h *OSSConfigHandler) Update(c *gin.Context) {
 	}
 
 	var updateData struct {
-		Name     string `json:"name" binding:"required"`
-		Type     string `json:"type" binding:"required"`
-		Endpoint string `json:"endpoint" binding:"required"`
-		Bucket   string `json:"bucket" binding:"required"`
+		Name      string `json:"name" binding:"required"`
+		Type      string `json:"type" binding:"required"`
+		Endpoint  string `json:"endpoint" binding:"required"`
+		Bucket    string `json:"bucket" binding:"required"`
 		AccessKey string `json:"access_key" binding:"required"`
 		SecretKey string `json:"secret_key" binding:"required"`
 	}
@@ -179,4 +179,4 @@ func (h *OSSConfigHandler) Test(c *gin.Context) {
 	response.Success(c, gin.H{
 		"message": "存储配置测试成功",
 	})
-} 
+}

@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
-	"github.com/ninesun/ossmanager-backend/pkg/models"
-	"github.com/ninesun/ossmanager-backend/pkg/tests/mocks"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/tests/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -136,4 +136,4 @@ func TestGetResourceID(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-} 
+}

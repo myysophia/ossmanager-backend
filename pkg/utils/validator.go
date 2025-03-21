@@ -8,7 +8,7 @@ import (
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
 	zh_translations "github.com/go-playground/validator/v10/translations/zh"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"reflect"
 	"strings"
@@ -81,8 +81,8 @@ func BindAndValidate(c *gin.Context, obj interface{}) error {
 
 	// 处理绑定错误
 	if err != nil {
-		logger.Warn("请求数据绑定失败", 
-			zap.String("path", c.Request.URL.Path), 
+		logger.Warn("请求数据绑定失败",
+			zap.String("path", c.Request.URL.Path),
 			zap.Error(err))
 		return err
 	}
@@ -90,10 +90,10 @@ func BindAndValidate(c *gin.Context, obj interface{}) error {
 	// 验证
 	err = validate.Struct(obj)
 	if err != nil {
-		logger.Warn("数据验证失败", 
-			zap.String("path", c.Request.URL.Path), 
+		logger.Warn("数据验证失败",
+			zap.String("path", c.Request.URL.Path),
 			zap.Error(err))
-		
+
 		// 如果是验证错误，翻译错误信息
 		if validationErrors, ok := err.(validator.ValidationErrors); ok {
 			errMsgs := []string{}
@@ -102,7 +102,7 @@ func BindAndValidate(c *gin.Context, obj interface{}) error {
 			}
 			return errors.New(strings.Join(errMsgs, "; "))
 		}
-		
+
 		return err
 	}
 

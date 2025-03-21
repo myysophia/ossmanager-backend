@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/fc-go-sdk"
-	"github.com/ninesun/ossmanager-backend/pkg/config"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/config"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 )
 
 // FCClient 是阿里云函数计算服务的客户端
 type FCClient struct {
-	client      *fc.Client
-	serviceName string
+	client       *fc.Client
+	serviceName  string
 	functionName string
 }
 
@@ -78,4 +78,4 @@ func (c *FCClient) InvokeMD5Calculation(bucketName, objectKey string, fileID uin
 	}
 
 	return nil
-} 
+}

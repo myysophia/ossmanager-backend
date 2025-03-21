@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
-	"github.com/ninesun/ossmanager-backend/pkg/models"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
-	"github.com/ninesun/ossmanager-backend/pkg/tests/mocks"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/tests/mocks"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -49,13 +49,13 @@ func TestOSSConfigHandler_Create(t *testing.T) {
 
 	// 设置请求体
 	body := map[string]interface{}{
-		"name":      "test-config",
-		"type":      "aws_s3",
+		"name":       "test-config",
+		"type":       "aws_s3",
 		"access_key": "test-key",
 		"secret_key": "test-secret",
-		"bucket":    "test-bucket",
-		"region":    "us-east-1",
-		"endpoint":  "https://s3.amazonaws.com",
+		"bucket":     "test-bucket",
+		"region":     "us-east-1",
+		"endpoint":   "https://s3.amazonaws.com",
 	}
 	jsonBody, _ := json.Marshal(body)
 	c.Request = httptest.NewRequest("POST", "/api/v1/configs", bytes.NewBuffer(jsonBody))
@@ -111,13 +111,13 @@ func TestOSSConfigHandler_Update(t *testing.T) {
 
 	// 设置请求体
 	body := map[string]interface{}{
-		"name":      "updated-config",
-		"type":      "aws_s3",
+		"name":       "updated-config",
+		"type":       "aws_s3",
 		"access_key": "updated-key",
 		"secret_key": "updated-secret",
-		"bucket":    "updated-bucket",
-		"region":    "us-west-2",
-		"endpoint":  "https://s3.us-west-2.amazonaws.com",
+		"bucket":     "updated-bucket",
+		"region":     "us-west-2",
+		"endpoint":   "https://s3.us-west-2.amazonaws.com",
 	}
 	jsonBody, _ := json.Marshal(body)
 	c.Request = httptest.NewRequest("PUT", "/api/v1/configs/1", bytes.NewBuffer(jsonBody))
@@ -341,4 +341,4 @@ func TestOSSConfigHandler_Test(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
-} 
+}

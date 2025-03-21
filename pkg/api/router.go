@@ -2,10 +2,10 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/api/handlers"
-	"github.com/ninesun/ossmanager-backend/pkg/api/middleware"
-	"github.com/ninesun/ossmanager-backend/pkg/oss/factory"
-	"github.com/ninesun/ossmanager-backend/pkg/function"
+	"github.com/myysophia/ossmanager-backend/pkg/api/handlers"
+	"github.com/myysophia/ossmanager-backend/pkg/api/middleware"
+	"github.com/myysophia/ossmanager-backend/pkg/function"
+	"github.com/myysophia/ossmanager-backend/pkg/oss/factory"
 )
 
 // SetupRouter 设置路由
@@ -15,7 +15,7 @@ func SetupRouter(storageFactory *factory.DefaultStorageFactory, md5Calculator *f
 
 	// 全局中间件
 	router.Use(
-		gin.Recovery(),               // 内置恢复中间件
+		gin.Recovery(),                  // 内置恢复中间件
 		middleware.RecoveryMiddleware(), // 自定义恢复中间件
 		middleware.LoggerMiddleware(),   // 日志中间件
 		middleware.CorsMiddleware(),     // 跨域中间件
@@ -38,7 +38,7 @@ func SetupRouter(storageFactory *factory.DefaultStorageFactory, md5Calculator *f
 	// 需要认证的路由
 	authorized := router.Group("/api/v1")
 	authorized.Use(
-		middleware.AuthMiddleware(), // 认证中间件
+		middleware.AuthMiddleware(),     // 认证中间件
 		middleware.AuditLogMiddleware(), // 审计日志中间件
 	)
 	{

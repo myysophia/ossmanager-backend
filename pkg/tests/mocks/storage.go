@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	"github.com/ninesun/ossmanager-backend/pkg/models"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
 )
 
 // MockStorageService is a mock of StorageService interface

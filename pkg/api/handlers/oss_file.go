@@ -2,23 +2,23 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/models"
-	"github.com/ninesun/ossmanager-backend/pkg/oss"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
-	"github.com/ninesun/ossmanager-backend/pkg/utils"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/oss"
+	"github.com/myysophia/ossmanager-backend/pkg/utils"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 	"path/filepath"
 	"strconv"
 )
 
 type OSSFileHandler struct {
-	db            *db.DB
+	db             *db.DB
 	storageFactory *oss.StorageFactory
 }
 
 func NewOSSFileHandler(db *db.DB, storageFactory *oss.StorageFactory) *OSSFileHandler {
 	return &OSSFileHandler{
-		db:            db,
+		db:             db,
 		storageFactory: storageFactory,
 	}
 }
@@ -116,7 +116,7 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{
-		"upload_id": uploadID,
+		"upload_id":  uploadID,
 		"object_key": objectKey,
 	})
 }
@@ -299,4 +299,4 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 	response.Success(c, gin.H{
 		"download_url": downloadURL,
 	})
-} 
+}

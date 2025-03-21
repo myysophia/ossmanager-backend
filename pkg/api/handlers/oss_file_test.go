@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
-	"github.com/ninesun/ossmanager-backend/pkg/models"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
-	"github.com/ninesun/ossmanager-backend/pkg/tests/mocks"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/tests/mocks"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -55,7 +55,7 @@ func TestOSSFileHandler_Upload(t *testing.T) {
 	body := map[string]interface{}{
 		"config_id":     1,
 		"original_name": "test.txt",
-		"size":         100,
+		"size":          100,
 		"content_type":  "text/plain",
 	}
 	jsonBody, _ := json.Marshal(body)
@@ -113,7 +113,7 @@ func TestOSSFileHandler_InitMultipartUpload(t *testing.T) {
 	body := map[string]interface{}{
 		"config_id":     1,
 		"original_name": "test.txt",
-		"size":         100,
+		"size":          100,
 		"content_type":  "text/plain",
 	}
 	jsonBody, _ := json.Marshal(body)
@@ -409,4 +409,4 @@ func TestOSSFileHandler_GetDownloadURL(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
-} 
+}

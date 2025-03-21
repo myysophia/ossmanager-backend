@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
-	"github.com/ninesun/ossmanager-backend/pkg/models"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
-	"github.com/ninesun/ossmanager-backend/pkg/tests/mocks"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/tests/mocks"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -191,4 +191,4 @@ func TestAuthHandler_UpdatePassword(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
-} 
+}

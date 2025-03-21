@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"github.com/ninesun/ossmanager-backend/pkg/config"
+	"github.com/myysophia/ossmanager-backend/pkg/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"os"
@@ -127,4 +127,4 @@ func With(fields ...zap.Field) *zap.Logger {
 // Sync 同步日志缓冲区
 func Sync() error {
 	return GetLogger().Sync()
-} 
+}

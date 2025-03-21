@@ -12,11 +12,11 @@ import (
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/aliyun/fc-runtime-go-sdk/fc"
-	"github.com/ninesun/ossmanager-backend/pkg/config"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/db/models"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
-	"github.com/ninesun/ossmanager-backend/pkg/oss/factory"
+	"github.com/myysophia/ossmanager-backend/pkg/config"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/oss/factory"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )

@@ -8,8 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/ninesun/ossmanager-backend/pkg/config"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/config"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"io"
 	"path"
@@ -81,7 +81,7 @@ func (s *CloudflareR2Service) getObjectKey(filename string) string {
 // Upload 上传文件
 func (s *CloudflareR2Service) Upload(file io.Reader, objectKey string) (string, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 上传文件
 	_, err := s.client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket: aws.String(s.bucketName),
@@ -112,7 +112,7 @@ func (s *CloudflareR2Service) Upload(file io.Reader, objectKey string) (string, 
 // InitMultipartUpload 初始化分片上传
 func (s *CloudflareR2Service) InitMultipartUpload(filename string) (string, []string, error) {
 	objectKey := s.getObjectKey(filename)
-	
+
 	// 初始化分片上传
 	result, err := s.client.CreateMultipartUpload(context.Background(), &s3.CreateMultipartUploadInput{
 		Bucket: aws.String(s.bucketName),
@@ -132,7 +132,7 @@ func (s *CloudflareR2Service) InitMultipartUpload(filename string) (string, []st
 // CompleteMultipartUpload 完成分片上传
 func (s *CloudflareR2Service) CompleteMultipartUpload(uploadID string, parts []Part, objectKey string) (string, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 将我们的Part结构转换为AWS SDK的Part结构
 	awsParts := make([]types.CompletedPart, len(parts))
 	for i, part := range parts {
@@ -152,9 +152,9 @@ func (s *CloudflareR2Service) CompleteMultipartUpload(uploadID string, parts []P
 		},
 	})
 	if err != nil {
-		logger.Error("完成CloudFlare R2分片上传失败", 
-			zap.String("objectKey", fullObjectKey), 
-			zap.String("uploadID", uploadID), 
+		logger.Error("完成CloudFlare R2分片上传失败",
+			zap.String("objectKey", fullObjectKey),
+			zap.String("uploadID", uploadID),
 			zap.Error(err))
 		return "", fmt.Errorf("完成CloudFlare R2分片上传失败: %w", err)
 	}
@@ -178,7 +178,7 @@ func (s *CloudflareR2Service) CompleteMultipartUpload(uploadID string, parts []P
 // AbortMultipartUpload 取消分片上传
 func (s *CloudflareR2Service) AbortMultipartUpload(uploadID string, objectKey string) error {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 取消分片上传
 	_, err := s.client.AbortMultipartUpload(context.Background(), &s3.AbortMultipartUploadInput{
 		Bucket:   aws.String(s.bucketName),
@@ -186,9 +186,9 @@ func (s *CloudflareR2Service) AbortMultipartUpload(uploadID string, objectKey st
 		UploadId: aws.String(uploadID),
 	})
 	if err != nil {
-		logger.Error("取消CloudFlare R2分片上传失败", 
-			zap.String("objectKey", fullObjectKey), 
-			zap.String("uploadID", uploadID), 
+		logger.Error("取消CloudFlare R2分片上传失败",
+			zap.String("objectKey", fullObjectKey),
+			zap.String("uploadID", uploadID),
 			zap.Error(err))
 		return fmt.Errorf("取消CloudFlare R2分片上传失败: %w", err)
 	}
@@ -199,10 +199,10 @@ func (s *CloudflareR2Service) AbortMultipartUpload(uploadID string, objectKey st
 // GenerateDownloadURL 生成下载URL
 func (s *CloudflareR2Service) GenerateDownloadURL(objectKey string, expiration time.Duration) (string, time.Time, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 设置过期时间
 	expires := time.Now().Add(expiration)
-	
+
 	// 生成预签名URL
 	presignClient := s3.NewPresignClient(s.client)
 	presignResult, err := presignClient.PresignGetObject(context.Background(), &s3.GetObjectInput{
@@ -222,7 +222,7 @@ func (s *CloudflareR2Service) GenerateDownloadURL(objectKey string, expiration t
 // DeleteObject 删除对象
 func (s *CloudflareR2Service) DeleteObject(objectKey string) error {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 删除对象
 	_, err := s.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucketName),
@@ -239,7 +239,7 @@ func (s *CloudflareR2Service) DeleteObject(objectKey string) error {
 // GetObjectInfo 获取对象信息
 func (s *CloudflareR2Service) GetObjectInfo(objectKey string) (int64, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 获取对象信息
 	result, err := s.client.HeadObject(context.Background(), &s3.HeadObjectInput{
 		Bucket: aws.String(s.bucketName),
@@ -261,18 +261,18 @@ func (s *CloudflareR2Service) GetBucketName() string {
 // GetObject 获取对象内容
 func (s *CloudflareR2Service) GetObject(objectKey string) (io.ReadCloser, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	ctx := context.Background()
 	resp, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucketName),
 		Key:    aws.String(fullObjectKey),
 	})
-	
+
 	if err != nil {
 		logger.Error("获取CloudFlare R2对象失败", zap.String("objectKey", fullObjectKey), zap.Error(err))
 		return nil, fmt.Errorf("获取CloudFlare R2对象失败: %w", err)
 	}
-	
+
 	return resp.Body, nil
 }
 
@@ -282,8 +282,8 @@ func (s *CloudflareR2Service) TriggerMD5Calculation(objectKey string, fileID uin
 		zap.String("objectKey", objectKey),
 		zap.Uint("fileID", fileID),
 		zap.String("bucket", s.bucketName))
-	
+
 	// CloudFlare R2目前不支持事件触发，需要通过外部服务触发计算
 	logger.Warn("CloudFlare R2不支持事件触发，无法异步计算MD5值")
 	return fmt.Errorf("CloudFlare R2不支持事件触发，无法异步计算MD5值")
-} 
+}

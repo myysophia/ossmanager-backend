@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/db/models"
-	"github.com/ninesun/ossmanager-backend/pkg/function"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/function"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"strconv"
 )
@@ -43,8 +43,8 @@ func (h *MD5Handler) TriggerCalculation(c *gin.Context) {
 
 	// 触发MD5计算
 	if err := h.md5Calculator.TriggerCalculation(&file); err != nil {
-		logger.Error("触发MD5计算失败", 
-			zap.Uint("file_id", file.ID), 
+		logger.Error("触发MD5计算失败",
+			zap.Uint("file_id", file.ID),
 			zap.String("object_key", file.ObjectKey),
 			zap.Error(err))
 		h.InternalError(c, "触发MD5计算失败")
@@ -86,4 +86,4 @@ func (h *MD5Handler) GetMD5(c *gin.Context) {
 		"file_id": file.ID,
 		"md5":     file.MD5,
 	})
-} 
+}

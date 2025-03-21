@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
-	"github.com/ninesun/ossmanager-backend/pkg/response"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/utils/response"
 	"go.uber.org/zap"
 	"net/http"
 	"runtime/debug"
@@ -31,4 +31,4 @@ func RecoveryMiddleware() gin.HandlerFunc {
 		}()
 		c.Next()
 	}
-} 
+}

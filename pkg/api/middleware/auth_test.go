@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/jwt"
+	"github.com/myysophia/ossmanager-backend/pkg/auth/jwt"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -69,4 +69,4 @@ func TestAuthMiddleware(t *testing.T) {
 		// 验证响应
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
-} 
+}

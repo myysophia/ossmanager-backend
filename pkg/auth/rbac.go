@@ -2,9 +2,9 @@ package auth
 
 import (
 	"errors"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/db/models"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -21,7 +21,7 @@ var (
 func CheckUserStatus(userID uint) error {
 	gormDB := db.GetDB()
 	var user models.User
-	
+
 	// 查询用户
 	err := gormDB.First(&user, userID).Error
 	if err != nil {
@@ -32,13 +32,13 @@ func CheckUserStatus(userID uint) error {
 		logger.Error("查询用户失败", zap.Uint("userID", userID), zap.Error(err))
 		return ErrDatabaseOperation
 	}
-	
+
 	// 检查用户状态
 	if !user.Status {
 		logger.Warn("用户已禁用", zap.Uint("userID", userID), zap.String("username", user.Username))
 		return ErrUserDisabled
 	}
-	
+
 	return nil
 }
 
@@ -48,9 +48,9 @@ func CheckPermission(userID uint, resource string, action string) error {
 	if err := CheckUserStatus(userID); err != nil {
 		return err
 	}
-	
+
 	gormDB := db.GetDB()
-	
+
 	// 使用原生SQL查询权限，因为关联查询较为复杂
 	// 检查用户通过角色获得的权限
 	var count int64
@@ -63,21 +63,21 @@ func CheckPermission(userID uint, resource string, action string) error {
 		AND p.resource = ? 
 		AND p.action = ?
 	`, userID, resource, action).Count(&count).Error
-	
+
 	if err != nil {
-		logger.Error("查询用户权限失败", 
-			zap.Uint("userID", userID), 
-			zap.String("resource", resource), 
-			zap.String("action", action), 
+		logger.Error("查询用户权限失败",
+			zap.Uint("userID", userID),
+			zap.String("resource", resource),
+			zap.String("action", action),
 			zap.Error(err))
 		return ErrDatabaseOperation
 	}
-	
+
 	// 如果有权限
 	if count > 0 {
 		return nil
 	}
-	
+
 	// 如果用户直接拥有 "管理" 权限，也认为有操作权限
 	err = gormDB.Raw(`
 		SELECT COUNT(*) FROM permissions p
@@ -88,24 +88,24 @@ func CheckPermission(userID uint, resource string, action string) error {
 		AND p.resource = ? 
 		AND p.action = 'manage'
 	`, userID, resource).Count(&count).Error
-	
+
 	if err != nil {
-		logger.Error("查询用户管理权限失败", 
-			zap.Uint("userID", userID), 
-			zap.String("resource", resource), 
+		logger.Error("查询用户管理权限失败",
+			zap.Uint("userID", userID),
+			zap.String("resource", resource),
 			zap.Error(err))
 		return ErrDatabaseOperation
 	}
-	
+
 	// 如果有管理权限
 	if count > 0 {
 		return nil
 	}
-	
+
 	// 权限不足
-	logger.Warn("用户权限不足", 
-		zap.Uint("userID", userID), 
-		zap.String("resource", resource), 
+	logger.Warn("用户权限不足",
+		zap.Uint("userID", userID),
+		zap.String("resource", resource),
 		zap.String("action", action))
 	return ErrPermissionDenied
 }
@@ -114,7 +114,7 @@ func CheckPermission(userID uint, resource string, action string) error {
 func GetUserRoles(userID uint) ([]models.Role, error) {
 	gormDB := db.GetDB()
 	var user models.User
-	
+
 	// 查询用户及其角色
 	err := gormDB.Preload("Roles").First(&user, userID).Error
 	if err != nil {
@@ -125,7 +125,7 @@ func GetUserRoles(userID uint) ([]models.Role, error) {
 		logger.Error("查询用户角色失败", zap.Uint("userID", userID), zap.Error(err))
 		return nil, ErrDatabaseOperation
 	}
-	
+
 	return user.Roles, nil
 }
 
@@ -136,32 +136,32 @@ func GetUserPermissions(userID uint) ([]models.Permission, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 如果用户没有角色
 	if len(roles) == 0 {
 		return []models.Permission{}, nil
 	}
-	
+
 	// 收集角色ID
 	var roleIDs []uint
 	for _, role := range roles {
 		roleIDs = append(roleIDs, role.ID)
 	}
-	
+
 	// 查询这些角色拥有的权限
 	gormDB := db.GetDB()
 	var permissions []models.Permission
-	
+
 	err = gormDB.Raw(`
 		SELECT DISTINCT p.* FROM permissions p
 		JOIN role_permissions rp ON p.id = rp.permission_id
 		WHERE rp.role_id IN (?)
 	`, roleIDs).Scan(&permissions).Error
-	
+
 	if err != nil {
 		logger.Error("查询角色权限失败", zap.Uints("roleIDs", roleIDs), zap.Error(err))
 		return nil, ErrDatabaseOperation
 	}
-	
+
 	return permissions, nil
-} 
+}

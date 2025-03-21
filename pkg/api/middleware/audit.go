@@ -2,9 +2,9 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ninesun/ossmanager-backend/pkg/db"
-	"github.com/ninesun/ossmanager-backend/pkg/db/models"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/db"
+	"github.com/myysophia/ossmanager-backend/pkg/db/models"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"strings"
 )
@@ -95,7 +95,7 @@ func getResourceID(path string) string {
 	// 获取资源ID，通常是最后一部分
 	// 例如 /api/v1/oss/files/1 => 1
 	lastPart := parts[len(parts)-1]
-	
+
 	// 如果最后一部分是操作，则ID是倒数第二部分
 	// 例如 /api/v1/oss/configs/1/default => 1
 	if lastPart == "default" || lastPart == "download" {
@@ -110,4 +110,4 @@ func getResourceID(path string) string {
 	}
 
 	return ""
-} 
+}

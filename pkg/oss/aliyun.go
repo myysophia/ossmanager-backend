@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
-	"github.com/ninesun/ossmanager-backend/pkg/config"
-	"github.com/ninesun/ossmanager-backend/pkg/logger"
+	"github.com/myysophia/ossmanager-backend/pkg/config"
+	"github.com/myysophia/ossmanager-backend/pkg/logger"
 	"go.uber.org/zap"
 	"io"
 	"path"
@@ -97,7 +97,7 @@ func (s *AliyunOSSService) InitMultipartUpload(filename string) (string, []strin
 // CompleteMultipartUpload 完成分片上传
 func (s *AliyunOSSService) CompleteMultipartUpload(uploadID string, parts []Part, objectKey string) (string, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 将我们的Part结构转换为阿里云SDK的Part结构
 	ossParts := make([]oss.UploadPart, len(parts))
 	for i, part := range parts {
@@ -112,11 +112,11 @@ func (s *AliyunOSSService) CompleteMultipartUpload(uploadID string, parts []Part
 		Key:      fullObjectKey,
 		UploadID: uploadID,
 	}, ossParts)
-	
+
 	if err != nil {
-		logger.Error("完成阿里云OSS分片上传失败", 
-			zap.String("objectKey", fullObjectKey), 
-			zap.String("uploadID", uploadID), 
+		logger.Error("完成阿里云OSS分片上传失败",
+			zap.String("objectKey", fullObjectKey),
+			zap.String("uploadID", uploadID),
 			zap.Error(err))
 		return "", fmt.Errorf("完成阿里云OSS分片上传失败: %w", err)
 	}
@@ -134,17 +134,17 @@ func (s *AliyunOSSService) CompleteMultipartUpload(uploadID string, parts []Part
 // AbortMultipartUpload 取消分片上传
 func (s *AliyunOSSService) AbortMultipartUpload(uploadID string, objectKey string) error {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 取消分片上传
 	err := s.bucket.AbortMultipartUpload(oss.InitiateMultipartUploadResult{
 		Key:      fullObjectKey,
 		UploadID: uploadID,
 	})
-	
+
 	if err != nil {
-		logger.Error("取消阿里云OSS分片上传失败", 
-			zap.String("objectKey", fullObjectKey), 
-			zap.String("uploadID", uploadID), 
+		logger.Error("取消阿里云OSS分片上传失败",
+			zap.String("objectKey", fullObjectKey),
+			zap.String("uploadID", uploadID),
 			zap.Error(err))
 		return fmt.Errorf("取消阿里云OSS分片上传失败: %w", err)
 	}
@@ -155,11 +155,11 @@ func (s *AliyunOSSService) AbortMultipartUpload(uploadID string, objectKey strin
 // GenerateDownloadURL 生成下载URL
 func (s *AliyunOSSService) GenerateDownloadURL(objectKey string, expiration time.Duration) (string, time.Time, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 设置过期时间
 	expires := time.Now().Add(expiration)
 	expiresSeconds := int64(expiration.Seconds())
-	
+
 	// 生成签名URL
 	signedURL, err := s.bucket.SignURL(fullObjectKey, oss.HTTPGet, expiresSeconds)
 	if err != nil {
@@ -173,7 +173,7 @@ func (s *AliyunOSSService) GenerateDownloadURL(objectKey string, expiration time
 // DeleteObject 删除对象
 func (s *AliyunOSSService) DeleteObject(objectKey string) error {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 删除对象
 	err := s.bucket.DeleteObject(fullObjectKey)
 	if err != nil {
@@ -187,7 +187,7 @@ func (s *AliyunOSSService) DeleteObject(objectKey string) error {
 // GetObjectInfo 获取对象信息
 func (s *AliyunOSSService) GetObjectInfo(objectKey string) (int64, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
-	
+
 	// 获取对象元数据
 	props, err := s.bucket.GetObjectDetailedMeta(fullObjectKey)
 	if err != nil {
@@ -244,4 +244,4 @@ func (s *AliyunOSSService) TriggerMD5Calculation(objectKey string, fileID uint) 
 		logger.Warn("阿里云OSS函数计算未启用，无法异步计算MD5值")
 		return fmt.Errorf("阿里云OSS函数计算未启用，无法异步计算MD5值")
 	}
-} 
+}
