@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
@@ -9,14 +8,15 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 type OSSFileHandler struct {
 	*BaseHandler
-	storageFactory *oss.StorageFactory
+	storageFactory oss.StorageFactory
 }
 
-func NewOSSFileHandler(storageFactory *oss.StorageFactory) *OSSFileHandler {
+func NewOSSFileHandler(storageFactory oss.StorageFactory) *OSSFileHandler {
 	return &OSSFileHandler{
 		BaseHandler:    NewBaseHandler(),
 		storageFactory: storageFactory,
@@ -45,7 +45,7 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	}
 
 	// 获取存储服务
-	storage, err := h.storageFactory.GetStorage(config.Type)
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
@@ -56,7 +56,14 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	objectKey := utils.GenerateObjectKey(ext)
 
 	// 上传文件
-	uploadURL, err := storage.Upload(c.Request.Context(), objectKey, file)
+	src, err := file.Open()
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "打开文件失败")
+		return
+	}
+	defer src.Close()
+
+	uploadURL, err := storage.Upload(src, objectKey)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "上传文件失败")
 		return
@@ -64,17 +71,17 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 
 	// 保存文件记录
 	ossFile := models.OSSFile{
-		ConfigID:          config.ID,
-		Filename:          objectKey,
-		OriginalFilename:  file.Filename,
-		FileSize:          file.Size,
-		StorageType:       config.StorageType,
-		Bucket:            config.Bucket,
-		ObjectKey:         objectKey,
-		DownloadURL:       uploadURL,
-		UploaderID:        utils.GetUserID(c),
-		UploadIP:          c.ClientIP(),
-		Status:            "ACTIVE",
+		ConfigID:         config.ID,
+		Filename:         objectKey,
+		OriginalFilename: file.Filename,
+		FileSize:         file.Size,
+		StorageType:      config.StorageType,
+		Bucket:           config.Bucket,
+		ObjectKey:        objectKey,
+		DownloadURL:      uploadURL,
+		UploaderID:       utils.GetUserID(c),
+		UploadIP:         c.ClientIP(),
+		Status:           "ACTIVE",
 	}
 
 	if err := db.GetDB().Create(&ossFile).Error; err != nil {
@@ -103,7 +110,7 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 		return
 	}
 
-	storage, err := h.storageFactory.GetStorage(config.Type)
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
@@ -112,7 +119,7 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 	ext := filepath.Ext(req.FileName)
 	objectKey := utils.GenerateObjectKey(ext)
 
-	uploadID, err := storage.InitMultipartUpload(c.Request.Context(), objectKey)
+	uploadID, urls, err := storage.InitMultipartUpload(objectKey)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "初始化分片上传失败")
 		return
@@ -121,6 +128,7 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 	h.Success(c, gin.H{
 		"upload_id":  uploadID,
 		"object_key": objectKey,
+		"urls":       urls,
 	})
 }
 
@@ -144,20 +152,29 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 		return
 	}
 
-	storage, err := h.storageFactory.GetStorage(config.Type)
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
-	downloadURL, err := storage.CompleteMultipartUpload(c.Request.Context(), req.ObjectKey, req.UploadID, req.Parts)
+	// 转换parts为oss.Part类型
+	ossParts := make([]oss.Part, len(req.Parts))
+	for i, part := range req.Parts {
+		ossParts[i] = oss.Part{
+			PartNumber: i + 1,
+			ETag:       part,
+		}
+	}
+
+	downloadURL, err := storage.CompleteMultipartUpload(req.UploadID, ossParts, req.ObjectKey)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "完成分片上传失败")
 		return
 	}
 
 	// 获取文件大小
-	fileSize, err := storage.GetObjectInfo(c.Request.Context(), req.ObjectKey)
+	fileSize, err := storage.GetObjectInfo(req.ObjectKey)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "获取文件信息失败")
 		return
@@ -165,17 +182,17 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 
 	// 保存文件记录
 	ossFile := models.OSSFile{
-		ConfigID:          config.ID,
-		Filename:          req.ObjectKey,
-		OriginalFilename:  req.ObjectKey,
-		FileSize:          fileSize,
-		StorageType:       config.StorageType,
-		Bucket:            config.Bucket,
-		ObjectKey:         req.ObjectKey,
-		DownloadURL:       downloadURL,
-		UploaderID:        utils.GetUserID(c),
-		UploadIP:          c.ClientIP(),
-		Status:            "ACTIVE",
+		ConfigID:         config.ID,
+		Filename:         req.ObjectKey,
+		OriginalFilename: req.ObjectKey,
+		FileSize:         fileSize,
+		StorageType:      config.StorageType,
+		Bucket:           config.Bucket,
+		ObjectKey:        req.ObjectKey,
+		DownloadURL:      downloadURL,
+		UploaderID:       utils.GetUserID(c),
+		UploadIP:         c.ClientIP(),
+		Status:           "ACTIVE",
 	}
 
 	if err := db.GetDB().Create(&ossFile).Error; err != nil {
@@ -205,13 +222,13 @@ func (h *OSSFileHandler) AbortMultipartUpload(c *gin.Context) {
 		return
 	}
 
-	storage, err := h.storageFactory.GetStorage(config.Type)
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
-	if err := storage.AbortMultipartUpload(c.Request.Context(), req.ObjectKey, req.UploadID); err != nil {
+	if err := storage.AbortMultipartUpload(req.UploadID, req.ObjectKey); err != nil {
 		h.Error(c, utils.CodeServerError, "取消分片上传失败")
 		return
 	}
@@ -264,13 +281,13 @@ func (h *OSSFileHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	storage, err := h.storageFactory.GetStorage(config.Type)
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
-	if err := storage.DeleteObject(c.Request.Context(), file.ObjectKey); err != nil {
+	if err := storage.DeleteObject(file.ObjectKey); err != nil {
 		h.Error(c, utils.CodeServerError, "删除文件失败")
 		return
 	}
@@ -299,13 +316,13 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 		return
 	}
 
-	storage, err := h.storageFactory.GetStorage(config.Type)
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "获取存储服务失败")
 		return
 	}
 
-	downloadURL, err := storage.GenerateDownloadURL(c.Request.Context(), file.ObjectKey)
+	downloadURL, expires, err := storage.GenerateDownloadURL(file.ObjectKey, 24*time.Hour)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "生成下载链接失败")
 		return
@@ -313,5 +330,6 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 
 	h.Success(c, gin.H{
 		"download_url": downloadURL,
+		"expires":      expires,
 	})
 }

@@ -13,11 +13,11 @@ import (
 // OSSHandler OSS处理器
 type OSSHandler struct {
 	*BaseHandler
-	storageFactory *oss.DefaultStorageFactory
+	storageFactory oss.StorageFactory
 }
 
 // NewOSSHandler 创建OSS处理器
-func NewOSSHandler(storageFactory *oss.DefaultStorageFactory) *OSSHandler {
+func NewOSSHandler(storageFactory oss.StorageFactory) *OSSHandler {
 	return &OSSHandler{
 		BaseHandler:    NewBaseHandler(),
 		storageFactory: storageFactory,

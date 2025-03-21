@@ -9,7 +9,7 @@ import (
 )
 
 // SetupRouter 设置路由
-func SetupRouter(storageFactory *oss.DefaultStorageFactory, md5Calculator *function.MD5Calculator) *gin.Engine {
+func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5Calculator) *gin.Engine {
 	// 创建Gin实例
 	router := gin.New()
 

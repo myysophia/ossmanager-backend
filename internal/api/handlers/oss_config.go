@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
@@ -13,11 +12,11 @@ import (
 // OSSConfigHandler OSS配置处理器
 type OSSConfigHandler struct {
 	*BaseHandler
-	storageFactory *oss.DefaultStorageFactory
+	storageFactory oss.StorageFactory
 }
 
 // NewOSSConfigHandler 创建OSS配置处理器
-func NewOSSConfigHandler(storageFactory *oss.DefaultStorageFactory) *OSSConfigHandler {
+func NewOSSConfigHandler(storageFactory oss.StorageFactory) *OSSConfigHandler {
 	return &OSSConfigHandler{
 		BaseHandler:    NewBaseHandler(),
 		storageFactory: storageFactory,
