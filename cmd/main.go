@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/myysophia/ossmanager-backend/pkg/api"
-	"github.com/myysophia/ossmanager-backend/pkg/config"
-	"github.com/myysophia/ossmanager-backend/pkg/db"
-	"github.com/myysophia/ossmanager-backend/pkg/function"
-	"github.com/myysophia/ossmanager-backend/pkg/logger"
-	"github.com/myysophia/ossmanager-backend/pkg/oss/factory"
+	"github.com/myysophia/ossmanager-backend/internal/api"
+	"github.com/myysophia/ossmanager-backend/internal/config"
+	"github.com/myysophia/ossmanager-backend/internal/db"
+	"github.com/myysophia/ossmanager-backend/internal/function"
+	"github.com/myysophia/ossmanager-backend/internal/logger"
+	"github.com/myysophia/ossmanager-backend/internal/oss"
 	"go.uber.org/zap"
 	"net/http"
 	"os"
@@ -40,7 +40,7 @@ func main() {
 	logger.Info("数据库初始化成功")
 
 	// 创建存储服务工厂
-	storageFactory := factory.NewStorageFactory(&cfg.OSS)
+	storageFactory := oss.NewStorageFactory(&cfg.OSS)
 
 	// 创建MD5计算器
 	md5Calculator := function.NewMD5Calculator(storageFactory, cfg.App.Workers)
