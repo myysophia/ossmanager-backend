@@ -87,4 +87,7 @@ type StorageFactory interface {
 
 	// GetDefaultStorageService 获取默认存储服务
 	GetDefaultStorageService() (StorageService, error)
+	
+	// ClearCache 清除缓存
+	ClearCache()
 } 
