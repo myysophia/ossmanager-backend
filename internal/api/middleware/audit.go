@@ -6,7 +6,9 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"go.uber.org/zap"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // AuditLogMiddleware 审计日志中间件
@@ -28,21 +30,29 @@ func AuditLogMiddleware() gin.HandlerFunc {
 		}
 		username, _ := c.Get("username")
 
+		// 获取状态码并转换为字符串
+		statusStr := strconv.Itoa(c.Writer.Status())
+
 		// 构建审计日志
-		auditLog := models.AuditLog{
-			UserID:       userID.(uint),
-			Username:     username.(string),
-			Action:       method,
-			ResourceType: getResourceType(c.Request.URL.Path),
-			ResourceID:   getResourceID(c.Request.URL.Path),
-			IPAddress:    c.ClientIP(),
-			UserAgent:    c.Request.UserAgent(),
-			Status:       c.Writer.Status(),
-		}
+		auditLog := &models.AuditLog{}
+		
+		// 手动设置审计日志的各个字段
+		auditLog.UserID = userID.(uint)
+		auditLog.Username = username.(string)
+		auditLog.Action = method
+		auditLog.ResourceType = getResourceType(c.Request.URL.Path)
+		auditLog.ResourceID = getResourceID(c.Request.URL.Path)
+		auditLog.IPAddress = c.ClientIP()
+		auditLog.UserAgent = c.Request.UserAgent()
+		auditLog.Status = statusStr
+		
+		// 设置基础模型字段
+		auditLog.CreatedAt = time.Now()
+		auditLog.UpdatedAt = time.Now()
 
 		// 异步保存审计日志
-		go func(log models.AuditLog) {
-			if err := db.GetDB().Create(&log).Error; err != nil {
+		go func(log *models.AuditLog) {
+			if err := db.GetDB().Create(log).Error; err != nil {
 				logger.Error("保存审计日志失败", zap.Error(err))
 			}
 		}(auditLog)

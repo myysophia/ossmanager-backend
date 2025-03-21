@@ -1,7 +1,5 @@
 package db
 
-import "go.uber.org/zap"
-
 // Close 关闭数据库连接
 func Close() error {
 	if db == nil {

@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/myysophia/ossmanager-backend/internal/utils/response"
+	"github.com/myysophia/ossmanager-backend/internal/utils"
 )
 
 // BaseHandler 基础处理器
@@ -17,35 +17,35 @@ func NewBaseHandler() *BaseHandler {
 
 // Success 成功响应
 func (h *BaseHandler) Success(c *gin.Context, data interface{}) {
-	response.Success(c, data)
+	utils.Success(c, data)
 }
 
 // Error 错误响应
 func (h *BaseHandler) Error(c *gin.Context, code int, message string) {
-	response.Error(c, code, message)
+	utils.Error(c, code, message)
 }
 
 // BadRequest 请求参数错误
 func (h *BaseHandler) BadRequest(c *gin.Context, message string) {
-	response.Error(c, response.CodeBadRequest, message)
+	utils.Error(c, utils.CodeBadRequest, message)
 }
 
 // Unauthorized 未授权
 func (h *BaseHandler) Unauthorized(c *gin.Context, message string) {
-	response.Error(c, response.CodeUnauthorized, message)
+	utils.Error(c, utils.CodeUnauthorized, message)
 }
 
 // Forbidden 禁止访问
 func (h *BaseHandler) Forbidden(c *gin.Context, message string) {
-	response.Error(c, response.CodeForbidden, message)
+	utils.Error(c, utils.CodeForbidden, message)
 }
 
 // NotFound 资源不存在
 func (h *BaseHandler) NotFound(c *gin.Context, message string) {
-	response.Error(c, response.CodeNotFound, message)
+	utils.Error(c, utils.CodeNotFound, message)
 }
 
 // InternalError 内部错误
 func (h *BaseHandler) InternalError(c *gin.Context, message string) {
-	response.Error(c, response.CodeInternalError, message)
+	utils.Error(c, utils.CodeInternalError, message)
 }

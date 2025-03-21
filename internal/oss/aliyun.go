@@ -1,7 +1,6 @@
 package oss
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/myysophia/ossmanager-backend/internal/config"

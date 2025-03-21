@@ -6,7 +6,7 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
-	"github.com/myysophia/ossmanager-backend/internal/utils/response"
+	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"strconv"
 )
 
@@ -115,7 +115,7 @@ func (h *OSSConfigHandler) DeleteConfig(c *gin.Context) {
 		return
 	}
 	if count > 0 {
-		h.Error(c, response.CodeConfigInUse, "存储配置正在使用中，无法删除")
+		h.Error(c, utils.CodeConfigInUse, "存储配置正在使用中，无法删除")
 		return
 	}
 
@@ -217,13 +217,13 @@ func isValidStorageType(storageType string) bool {
 func (h *OSSConfigHandler) Test(c *gin.Context) {
 	var config models.OSSConfig
 	if err := c.ShouldBindJSON(&config); err != nil {
-		response.Error(c, response.CodeInvalidParams, "参数错误", err)
+		utils.Error(c, utils.CodeInvalidParams, "参数错误", err)
 		return
 	}
 
 	// 验证配置类型
 	if !isValidStorageType(config.StorageType) {
-		response.Error(c, response.CodeInvalidParams, "不支持的存储类型", nil)
+		utils.Error(c, utils.CodeInvalidParams, "不支持的存储类型", nil)
 		return
 	}
 
@@ -234,7 +234,7 @@ func (h *OSSConfigHandler) Test(c *gin.Context) {
 	// 4. 删除测试文件
 	// 5. 返回测试结果
 
-	response.Success(c, gin.H{
+	utils.Success(c, gin.H{
 		"message": "存储配置测试成功",
 	})
 }

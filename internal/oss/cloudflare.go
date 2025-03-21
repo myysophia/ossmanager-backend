@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// CloudflareR2Service CloudFlare R2存储服务
+// CloudflareR2Service Cloudflare R2存储服务
 type CloudflareR2Service struct {
 	client     *s3.Client
 	config     *config.CloudflareR2Config
@@ -24,15 +24,8 @@ type CloudflareR2Service struct {
 	uploadDir  string
 }
 
-// NewCloudflareR2Service 创建CloudFlare R2存储服务
+// NewCloudflareR2Service 创建Cloudflare R2存储服务
 func NewCloudflareR2Service(cfg *config.CloudflareR2Config) (*CloudflareR2Service, error) {
-	// 创建自定义端点解析器
-	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-		return aws.Endpoint{
-			URL: fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID),
-		}, nil
-	})
-
 	// 创建AWS凭证
 	creds := credentials.NewStaticCredentialsProvider(
 		cfg.AccessKeyID,
@@ -40,27 +33,40 @@ func NewCloudflareR2Service(cfg *config.CloudflareR2Config) (*CloudflareR2Servic
 		"",
 	)
 
-	// 加载AWS配置
-	awsCfg, err := config.LoadDefaultConfig(context.Background(),
-		config.WithRegion("auto"),
-		config.WithCredentialsProvider(creds),
-		config.WithEndpointResolverWithOptions(customResolver),
+	// 构造R2端点
+	endpoint := fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID)
+
+	// 创建AWS配置
+	awsCfg, err := awsconfig.LoadDefaultConfig(
+		context.TODO(),
+		awsconfig.WithRegion("auto"),
+		awsconfig.WithCredentialsProvider(creds),
+		awsconfig.WithEndpointResolverWithOptions(
+			aws.EndpointResolverWithOptionsFunc(
+				func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+					return aws.Endpoint{
+						URL:               endpoint,
+						SigningRegion:     "auto",
+						HostnameImmutable: true,
+					}, nil
+				},
+			),
+		),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("加载CloudFlare R2配置失败: %w", err)
+		logger.Error("创建R2配置失败", zap.Error(err))
+		return nil, fmt.Errorf("创建R2配置失败: %w", err)
 	}
 
 	// 创建S3客户端
 	client := s3.NewFromConfig(awsCfg)
 
-	service := &CloudflareR2Service{
+	return &CloudflareR2Service{
 		client:     client,
 		config:     cfg,
 		bucketName: cfg.Bucket,
 		uploadDir:  cfg.UploadDir,
-	}
-
-	return service, nil
+	}, nil
 }
 
 // GetName 获取存储服务名称
@@ -238,19 +244,22 @@ func (s *CloudflareR2Service) DeleteObject(objectKey string) error {
 
 // GetObjectInfo 获取对象信息
 func (s *CloudflareR2Service) GetObjectInfo(objectKey string) (int64, error) {
-	fullObjectKey := s.getObjectKey(objectKey)
-
+	objectKey = s.getObjectKey(objectKey)
 	// 获取对象信息
-	result, err := s.client.HeadObject(context.Background(), &s3.HeadObjectInput{
+	result, err := s.client.HeadObject(context.TODO(), &s3.HeadObjectInput{
 		Bucket: aws.String(s.bucketName),
-		Key:    aws.String(fullObjectKey),
+		Key:    aws.String(objectKey),
 	})
 	if err != nil {
-		logger.Error("获取CloudFlare R2对象信息失败", zap.String("objectKey", fullObjectKey), zap.Error(err))
-		return 0, fmt.Errorf("获取CloudFlare R2对象信息失败: %w", err)
+		logger.Error("获取R2对象信息失败", zap.String("bucket", s.bucketName), zap.String("key", objectKey), zap.Error(err))
+		return 0, fmt.Errorf("获取R2对象信息失败: %w", err)
 	}
 
-	return result.ContentLength, nil
+	// 返回对象大小
+	if result.ContentLength != nil {
+		return *result.ContentLength, nil
+	}
+	return 0, nil
 }
 
 // GetBucketName 获取存储桶名称

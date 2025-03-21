@@ -112,11 +112,8 @@ func CheckPermission(userID uint, resource string, action string) error {
 
 // GetUserRoles 获取用户角色
 func GetUserRoles(userID uint) ([]models.Role, error) {
-	gormDB := db.GetDB()
 	var user models.User
-
-	// 查询用户及其角色
-	err := gormDB.Preload("Roles").First(&user, userID).Error
+	err := db.GetDB().Preload("Roles").First(&user, userID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Warn("用户不存在", zap.Uint("userID", userID))
@@ -126,7 +123,13 @@ func GetUserRoles(userID uint) ([]models.Role, error) {
 		return nil, ErrDatabaseOperation
 	}
 
-	return user.Roles, nil
+	// 将 []*models.Role 转换为 []models.Role
+	roles := make([]models.Role, len(user.Roles))
+	for i, role := range user.Roles {
+		roles[i] = *role
+	}
+
+	return roles, nil
 }
 
 // GetUserPermissions 获取用户权限

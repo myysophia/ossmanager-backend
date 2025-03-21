@@ -2,10 +2,11 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/myysophia/ossmanager-backend/internal/auth"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
-	"github.com/myysophia/ossmanager-backend/internal/utils/response"
+	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +16,7 @@ func PermissionMiddleware(requiredPermissions ...string) gin.HandlerFunc {
 		// 从上下文获取用户ID
 		userID, exists := c.Get("userID")
 		if !exists {
-			response.Error(c, response.CodeUnauthorized, "未登录")
+			utils.Error(c, utils.CodeUnauthorized, "未登录")
 			c.Abort()
 			return
 		}
@@ -24,13 +25,13 @@ func PermissionMiddleware(requiredPermissions ...string) gin.HandlerFunc {
 		hasPermission, err := checkPermissions(userID.(uint), requiredPermissions...)
 		if err != nil {
 			logger.Error("检查权限失败", zap.Error(err))
-			response.Error(c, response.CodeInternalError, "检查权限失败")
+			utils.Error(c, utils.CodeInternalError, "检查权限失败")
 			c.Abort()
 			return
 		}
 
 		if !hasPermission {
-			response.Error(c, response.CodeForbidden, "没有权限执行此操作")
+			utils.Error(c, utils.CodeForbidden, "没有权限执行此操作")
 			c.Abort()
 			return
 		}
@@ -45,7 +46,7 @@ func RoleMiddleware(requiredRoles ...string) gin.HandlerFunc {
 		// 从上下文获取用户ID
 		userID, exists := c.Get("userID")
 		if !exists {
-			response.Error(c, response.CodeUnauthorized, "未登录")
+			utils.Error(c, utils.CodeUnauthorized, "未登录")
 			c.Abort()
 			return
 		}
@@ -54,13 +55,13 @@ func RoleMiddleware(requiredRoles ...string) gin.HandlerFunc {
 		hasRole, err := checkRoles(userID.(uint), requiredRoles...)
 		if err != nil {
 			logger.Error("检查角色失败", zap.Error(err))
-			response.Error(c, response.CodeInternalError, "检查角色失败")
+			utils.Error(c, utils.CodeInternalError, "检查角色失败")
 			c.Abort()
 			return
 		}
 
 		if !hasRole {
-			response.Error(c, response.CodeForbidden, "没有权限执行此操作")
+			utils.Error(c, utils.CodeForbidden, "没有权限执行此操作")
 			c.Abort()
 			return
 		}

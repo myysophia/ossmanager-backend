@@ -11,7 +11,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/tests/mocks"
-	"github.com/myysophia/ossmanager-backend/internal/utils/response"
+	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -66,7 +66,7 @@ func TestOSSConfigHandler_Create(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
@@ -128,7 +128,7 @@ func TestOSSConfigHandler_Update(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
@@ -177,7 +177,7 @@ func TestOSSConfigHandler_Delete(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
@@ -243,7 +243,7 @@ func TestOSSConfigHandler_List(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
@@ -290,7 +290,7 @@ func TestOSSConfigHandler_Get(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
@@ -337,7 +337,7 @@ func TestOSSConfigHandler_Test(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)

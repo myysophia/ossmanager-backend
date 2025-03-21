@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -33,26 +33,26 @@ func NewAWSS3Service(cfg *config.AWSS3Config) (*AWSS3Service, error) {
 		"",
 	)
 
-	// 加载AWS配置
-	awsCfg, err := config.LoadDefaultConfig(context.Background(),
-		config.WithRegion(cfg.Region),
-		config.WithCredentialsProvider(creds),
+	// 创建AWS配置
+	awsCfg, err := awsconfig.LoadDefaultConfig(
+		context.TODO(),
+		awsconfig.WithRegion(cfg.Region),
+		awsconfig.WithCredentialsProvider(creds),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("加载AWS配置失败: %w", err)
+		logger.Error("创建AWS配置失败", zap.Error(err))
+		return nil, fmt.Errorf("创建AWS配置失败: %w", err)
 	}
 
 	// 创建S3客户端
 	client := s3.NewFromConfig(awsCfg)
 
-	service := &AWSS3Service{
+	return &AWSS3Service{
 		client:     client,
 		config:     cfg,
 		bucketName: cfg.Bucket,
 		uploadDir:  cfg.UploadDir,
-	}
-
-	return service, nil
+	}, nil
 }
 
 // GetName 获取存储服务名称
@@ -230,19 +230,22 @@ func (s *AWSS3Service) DeleteObject(objectKey string) error {
 
 // GetObjectInfo 获取对象信息
 func (s *AWSS3Service) GetObjectInfo(objectKey string) (int64, error) {
-	fullObjectKey := s.getObjectKey(objectKey)
-
+	objectKey = s.getObjectKey(objectKey)
 	// 获取对象信息
-	result, err := s.client.HeadObject(context.Background(), &s3.HeadObjectInput{
+	result, err := s.client.HeadObject(context.TODO(), &s3.HeadObjectInput{
 		Bucket: aws.String(s.bucketName),
-		Key:    aws.String(fullObjectKey),
+		Key:    aws.String(objectKey),
 	})
 	if err != nil {
-		logger.Error("获取AWS S3对象信息失败", zap.String("objectKey", fullObjectKey), zap.Error(err))
-		return 0, fmt.Errorf("获取AWS S3对象信息失败: %w", err)
+		logger.Error("获取对象信息失败", zap.String("bucket", s.bucketName), zap.String("key", objectKey), zap.Error(err))
+		return 0, fmt.Errorf("获取对象信息失败: %w", err)
 	}
 
-	return result.ContentLength, nil
+	// 返回对象大小
+	if result.ContentLength != nil {
+		return *result.ContentLength, nil
+	}
+	return 0, nil
 }
 
 // GetBucketName 获取存储桶名称

@@ -3,7 +3,7 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
-	"github.com/myysophia/ossmanager-backend/internal/utils/response"
+	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"go.uber.org/zap"
 	"net/http"
 	"runtime/debug"
@@ -25,7 +25,7 @@ func RecoveryMiddleware() gin.HandlerFunc {
 				)
 
 				// 响应内部服务器错误
-				response.Error(c, response.CodeInternalError, "服务器内部错误")
+				utils.Error(c, utils.CodeInternalError, "服务器内部错误")
 				c.Abort()
 			}
 		}()

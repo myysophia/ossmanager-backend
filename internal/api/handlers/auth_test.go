@@ -7,7 +7,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/tests/mocks"
-	"github.com/myysophia/ossmanager-backend/internal/utils/response"
+	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -55,7 +55,7 @@ func TestAuthHandler_Login(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
@@ -103,7 +103,7 @@ func TestAuthHandler_Register(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
@@ -140,7 +140,7 @@ func TestAuthHandler_GetUserInfo(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
@@ -187,7 +187,7 @@ func TestAuthHandler_UpdatePassword(t *testing.T) {
 	// 验证响应
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp response.Response
+	var resp utils.Response
 	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)

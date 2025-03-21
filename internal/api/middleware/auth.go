@@ -3,8 +3,9 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/auth"
+	"github.com/myysophia/ossmanager-backend/internal/config"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
-	"github.com/myysophia/ossmanager-backend/internal/utils/response"
+	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"go.uber.org/zap"
 	"strings"
 )
@@ -15,7 +16,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// 从请求头获取 JWT 令牌
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			response.Error(c, response.CodeUnauthorized, "未提供认证令牌")
+			utils.Error(c, utils.CodeUnauthorized, "未提供认证令牌")
 			c.Abort()
 			return
 		}
@@ -23,25 +24,30 @@ func AuthMiddleware() gin.HandlerFunc {
 		// 检查 Authorization 头格式
 		parts := strings.SplitN(authHeader, " ", 2)
 		if !(len(parts) == 2 && parts[0] == "Bearer") {
-			response.Error(c, response.CodeUnauthorized, "认证令牌格式错误")
+			utils.Error(c, utils.CodeUnauthorized, "认证令牌格式错误")
 			c.Abort()
 			return
 		}
 
-		// 解析令牌
-		token := parts[1]
-		claims, err := auth.ParseToken(token)
+		// 获取JWT配置
+		jwtConfig := &config.JWTConfig{
+			SecretKey: "your-secret-key", // 这应该从配置中读取
+			ExpiresIn: 3600,              // 过期时间，单位：秒
+			Issuer:    "oss-manager-backend",
+		}
+
+		// 解析JWT令牌
+		claims, err := auth.ParseToken(parts[1], jwtConfig)
 		if err != nil {
-			logger.Error("解析令牌失败", zap.Error(err))
-			response.Error(c, response.CodeUnauthorized, "无效的认证令牌")
+			logger.Warn("解析JWT令牌失败", zap.Error(err))
+			utils.Error(c, utils.CodeUnauthorized, "无效的认证令牌")
 			c.Abort()
 			return
 		}
 
-		// 将用户信息存储到上下文中
+		// 将用户信息保存到上下文
 		c.Set("userID", claims.UserID)
 		c.Set("username", claims.Username)
-
 		c.Next()
 	}
 }

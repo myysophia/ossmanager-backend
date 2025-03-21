@@ -16,7 +16,7 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
-	"github.com/myysophia/ossmanager-backend/internal/oss"
+	ossService "github.com/myysophia/ossmanager-backend/internal/oss"
 	"go.uber.org/zap"
 )
 
@@ -54,7 +54,7 @@ type MD5CalculationRequest struct {
 
 // MD5Calculator MD5计算器
 type MD5Calculator struct {
-	storageFactory *oss.DefaultStorageFactory
+	storageFactory *ossService.DefaultStorageFactory
 	calculateChan  chan *models.OSSFile
 	workers        int
 	wg             sync.WaitGroup
@@ -63,7 +63,7 @@ type MD5Calculator struct {
 }
 
 // NewMD5Calculator 创建MD5计算器
-func NewMD5Calculator(storageFactory *oss.DefaultStorageFactory, workers int) *MD5Calculator {
+func NewMD5Calculator(storageFactory *ossService.DefaultStorageFactory, workers int) *MD5Calculator {
 	if workers <= 0 {
 		workers = 3 // 默认3个工作协程
 	}
@@ -164,15 +164,15 @@ func (c *MD5Calculator) calculateFileMD5(file *models.OSSFile) {
 	}
 
 	// 获取配置
-	storage, err := c.storageFactory.GetStorageProvider(file.ConfigID)
+	storage, err := c.storageFactory.GetStorageService(file.StorageType)
 	if err != nil {
-		logger.Error("获取存储提供商失败", zap.Uint("config_id", file.ConfigID), zap.Error(err))
+		logger.Error("获取存储提供商失败", zap.String("storage_type", file.StorageType), zap.Error(err))
 		updateStatus(models.MD5StatusFailed, "")
 		return
 	}
 
 	// 下载文件并计算MD5
-	reader, err := storage.Download(file.ObjectKey)
+	reader, err := storage.GetObject(file.ObjectKey)
 	if err != nil {
 		logger.Error("下载文件失败", zap.String("object_key", file.ObjectKey), zap.Error(err))
 		updateStatus(models.MD5StatusFailed, "")
@@ -203,28 +203,22 @@ func (c *MD5Calculator) calculateFileMD5(file *models.OSSFile) {
 func (c *MD5Calculator) CalculateMD5Sync(file *models.OSSFile) error {
 	logger.Info("开始同步计算文件MD5", zap.Uint("file_id", file.ID))
 
-	// 创建OSS客户端
-	client, err := oss.New(c.ossConfig.Endpoint, c.ossConfig.AccessKeyID, c.ossConfig.AccessKeySecret)
+	// 获取存储提供商
+	storage, err := c.storageFactory.GetStorageService(file.StorageType)
 	if err != nil {
-		return fmt.Errorf("创建阿里云OSS客户端失败: %w", err)
+		return fmt.Errorf("获取存储提供商失败: %w", err)
 	}
 
-	// 获取存储空间
-	bucket, err := client.Bucket(c.ossConfig.Bucket)
+	// 下载文件并计算MD5
+	reader, err := storage.GetObject(file.ObjectKey)
 	if err != nil {
-		return fmt.Errorf("获取存储空间失败: %w", err)
+		return fmt.Errorf("获取文件内容失败: %w", err)
 	}
-
-	// 获取文件流
-	body, err := bucket.GetObject(file.ObjectKey)
-	if err != nil {
-		return fmt.Errorf("获取文件流失败: %w", err)
-	}
-	defer body.Close()
+	defer reader.Close()
 
 	// 计算MD5
 	hash := md5.New()
-	if _, err := io.Copy(hash, body); err != nil {
+	if _, err := io.Copy(hash, reader); err != nil {
 		return fmt.Errorf("计算MD5时发生错误: %w", err)
 	}
 
@@ -239,7 +233,7 @@ func (c *MD5Calculator) CalculateMD5Sync(file *models.OSSFile) error {
 
 // UpdateFileMD5 更新数据库中文件的MD5值
 func (c *MD5Calculator) UpdateFileMD5(fileID uint, md5Value string) error {
-	result := c.db.Model(&models.OSSFile{}).Where("id = ?", fileID).Update("md5", md5Value)
+	result := db.GetDB().Model(&models.OSSFile{}).Where("id = ?", fileID).Update("md5", md5Value)
 	if result.Error != nil {
 		return fmt.Errorf("更新文件MD5值失败: %w", result.Error)
 	}
@@ -355,12 +349,13 @@ func updateFileMD5InDB(ctx context.Context, bucketName, objectKey, md5Value stri
 
 // HandleManualRequest 处理手动触发的MD5计算请求
 func (c *MD5Calculator) HandleManualRequest(ctx context.Context, req MD5CalculationRequest) error {
-	file := &models.OSSFile{
-		ID:        req.FileID,
-		ObjectKey: req.ObjectKey,
+	// 从数据库获取完整的文件信息
+	var file models.OSSFile
+	if err := db.GetDB().First(&file, req.FileID).Error; err != nil {
+		return fmt.Errorf("获取文件信息失败: %w", err)
 	}
 	
-	return c.CalculateMD5Sync(file)
+	return c.CalculateMD5Sync(&file)
 }
 
 // 注册函数计算处理函数
