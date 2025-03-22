@@ -1,14 +1,16 @@
 package middleware
 
 import (
+	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"go.uber.org/zap"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // AuditLogMiddleware 审计日志中间件
@@ -33,9 +35,24 @@ func AuditLogMiddleware() gin.HandlerFunc {
 		// 获取状态码并转换为字符串
 		statusStr := strconv.Itoa(c.Writer.Status())
 
+		// 构建简单的详情信息
+		details := map[string]interface{}{
+			"path":   c.Request.URL.Path,
+			"query":  c.Request.URL.RawQuery,
+			"method": method,
+			"status": statusStr,
+		}
+
+		// 将详情转换为JSON字符串
+		detailsJSON, err := json.Marshal(details)
+		if err != nil {
+			logger.Error("审计日志详情转JSON失败", zap.Error(err))
+			detailsJSON = []byte("{}") // 使用空对象作为默认值
+		}
+
 		// 构建审计日志
 		auditLog := &models.AuditLog{}
-		
+
 		// 手动设置审计日志的各个字段
 		auditLog.UserID = userID.(uint)
 		auditLog.Username = username.(string)
@@ -45,7 +62,8 @@ func AuditLogMiddleware() gin.HandlerFunc {
 		auditLog.IPAddress = c.ClientIP()
 		auditLog.UserAgent = c.Request.UserAgent()
 		auditLog.Status = statusStr
-		
+		auditLog.Details = string(detailsJSON) // 设置有效的JSON字符串
+
 		// 设置基础模型字段
 		auditLog.CreatedAt = time.Now()
 		auditLog.UpdatedAt = time.Now()
@@ -53,7 +71,11 @@ func AuditLogMiddleware() gin.HandlerFunc {
 		// 异步保存审计日志
 		go func(log *models.AuditLog) {
 			if err := db.GetDB().Create(log).Error; err != nil {
-				logger.Error("保存审计日志失败", zap.Error(err))
+				logger.Error("保存审计日志失败",
+					zap.Error(err),
+					zap.String("details", log.Details),
+					zap.String("resource_type", log.ResourceType),
+					zap.String("action", log.Action))
 			}
 		}(auditLog)
 	}
