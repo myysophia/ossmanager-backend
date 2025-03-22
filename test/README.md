@@ -4,6 +4,448 @@
 
 对OSS管理系统的核心接口进行压力测试，评估系统在高并发场景下的性能表现，确保系统具备足够的稳定性和可扩展性。
 
+## 接口功能测试
+
+在进行压测前，推荐先对各个接口进行功能单元测试，确保接口功能正常。以下是使用curl命令对各接口进行功能测试的示例：
+
+### 认证接口
+
+#### 用户注册
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "password": "Password123!",
+    "email": "test@example.com",
+    "real_name": "测试用户"
+  }'
+```
+
+#### 用户登录
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "password": "Password123!"
+  }'
+```
+
+登录成功后会返回包含token的JSON，可以保存token用于后续请求：
+
+```bash
+# 提取并保存token到环境变量
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "password": "Password123!"
+  }' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+echo "获取到的Token: $TOKEN"
+```
+
+#### 获取当前用户信息
+
+```bash
+curl -X GET http://localhost:8080/api/v1/user/current \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### OSS文件管理
+
+#### 文件上传
+
+```bash
+# 创建一个测试文件
+echo "测试文件内容" > test_file.txt
+
+# 上传文件，config_id替换为实际的配置ID
+curl -X POST http://localhost:8080/api/v1/oss/files \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@test_file.txt" \
+  -F "config_id=1"
+```
+
+#### 文件列表查询
+
+```bash
+# 基本查询
+curl -X GET "http://localhost:8080/api/v1/oss/files?page=1&page_size=10" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 带过滤条件的查询
+curl -X GET "http://localhost:8080/api/v1/oss/files?page=1&page_size=10&file_name=test&storage_type=s3" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 文件删除
+
+```bash
+# 替换file_id为实际的文件ID
+curl -X DELETE http://localhost:8080/api/v1/oss/files/1 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 获取文件下载链接
+
+```bash
+# 替换file_id为实际的文件ID
+curl -X GET http://localhost:8080/api/v1/oss/files/1/download \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 触发MD5计算
+
+```bash
+# 替换file_id为实际的文件ID
+curl -X POST http://localhost:8080/api/v1/oss/files/1/md5 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 获取文件MD5值
+
+```bash
+# 替换file_id为实际的文件ID
+curl -X GET http://localhost:8080/api/v1/oss/files/1/md5 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### OSS配置管理
+
+#### 创建配置
+
+```bash
+# 创建S3配置
+curl -X POST http://localhost:8080/api/v1/oss/configs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "测试S3配置",
+    "storage_type": "s3",
+    "access_key": "your-access-key",
+    "secret_key": "your-secret-key",
+    "region": "us-east-1",
+    "bucket": "test-bucket",
+    "endpoint": "https://s3.amazonaws.com",
+    "description": "用于测试的S3配置"
+  }'
+
+# 创建本地存储配置
+curl -X POST http://localhost:8080/api/v1/oss/configs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "本地存储配置",
+    "storage_type": "local",
+    "root_path": "/data/storage",
+    "description": "本地文件系统存储"
+  }'
+```
+
+#### 更新配置
+
+```bash
+# 替换config_id为实际的配置ID
+curl -X PUT http://localhost:8080/api/v1/oss/configs/1 \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "更新后的S3配置",
+    "storage_type": "s3",
+    "access_key": "updated-access-key",
+    "secret_key": "updated-secret-key",
+    "region": "us-west-1",
+    "bucket": "new-test-bucket",
+    "endpoint": "https://s3.amazonaws.com",
+    "description": "已更新的S3配置"
+  }'
+```
+
+#### 删除配置
+
+```bash
+# 替换config_id为实际的配置ID
+curl -X DELETE http://localhost:8080/api/v1/oss/configs/1 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 获取配置列表
+
+```bash
+# 基本查询
+curl -X GET "http://localhost:8080/api/v1/oss/configs?page=1&page_size=10" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 带过滤条件的查询
+curl -X GET "http://localhost:8080/api/v1/oss/configs?page=1&page_size=10&name=测试&storage_type=s3" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 获取单个配置详情
+
+```bash
+# 替换config_id为实际的配置ID
+curl -X GET http://localhost:8080/api/v1/oss/configs/1 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 设置默认配置
+
+```bash
+# 替换config_id为实际的配置ID
+curl -X PUT http://localhost:8080/api/v1/oss/configs/1/default \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 测试配置连接
+
+```bash
+# 测试已有配置连接
+curl -X POST http://localhost:8080/api/v1/oss/configs/1/test \
+  -H "Authorization: Bearer $TOKEN"
+
+# 测试新配置连接而不保存
+curl -X POST http://localhost:8080/api/v1/oss/configs/test \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "storage_type": "s3",
+    "access_key": "test-access-key",
+    "secret_key": "test-secret-key",
+    "region": "ap-northeast-1",
+    "bucket": "test-bucket",
+    "endpoint": "https://s3.amazonaws.com"
+  }'
+```
+
+### 自动化测试脚本
+
+以下是将上述所有接口集成到一个自动化测试脚本中的示例：
+
+```bash
+#!/bin/bash
+# test/shell/api_test.sh
+
+# 设置API基础URL
+BASE_URL="http://localhost:8080/api/v1"
+USERNAME="testuser_$(date +%s)"  # 使用时间戳确保用户名唯一
+PASSWORD="Password123!"
+EMAIL="test_$(date +%s)@example.com"
+CONFIG_ID=""
+FILE_ID=""
+UPLOAD_ID=""
+
+echo "===== OSS管理系统API功能测试 ====="
+
+# 1. 用户注册
+echo -e "\n1. 测试用户注册..."
+REGISTER_RESULT=$(curl -s -X POST "${BASE_URL}/auth/register" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"username\": \"${USERNAME}\",
+    \"password\": \"${PASSWORD}\",
+    \"email\": \"${EMAIL}\",
+    \"real_name\": \"测试用户\"
+  }")
+echo "注册结果: $REGISTER_RESULT"
+
+# 2. 用户登录
+echo -e "\n2. 测试用户登录..."
+LOGIN_RESULT=$(curl -s -X POST "${BASE_URL}/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"username\": \"${USERNAME}\",
+    \"password\": \"${PASSWORD}\"
+  }")
+echo "登录结果: $LOGIN_RESULT"
+
+# 提取token
+TOKEN=$(echo $LOGIN_RESULT | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+if [ -z "$TOKEN" ]; then
+  echo "登录失败，无法获取token，测试终止"
+  exit 1
+fi
+echo "获取到token: ${TOKEN:0:15}..."
+
+# 3. 获取当前用户信息
+echo -e "\n3. 测试获取用户信息..."
+USER_INFO=$(curl -s -X GET "${BASE_URL}/user/current" \
+  -H "Authorization: Bearer $TOKEN")
+echo "用户信息: $USER_INFO"
+
+# 4. 创建存储配置
+echo -e "\n4. 测试创建存储配置..."
+CONFIG_RESULT=$(curl -s -X POST "${BASE_URL}/oss/configs" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "测试本地存储",
+    "storage_type": "local",
+    "root_path": "/tmp/storage",
+    "description": "测试用本地存储"
+  }')
+echo "创建配置结果: $CONFIG_RESULT"
+
+# 提取配置ID
+CONFIG_ID=$(echo $CONFIG_RESULT | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+if [ -z "$CONFIG_ID" ]; then
+  echo "创建配置失败，无法获取配置ID，使用默认值1"
+  CONFIG_ID="1"
+fi
+echo "获取到配置ID: $CONFIG_ID"
+
+# 5. 测试配置连接
+echo -e "\n5. 测试配置连接..."
+TEST_RESULT=$(curl -s -X POST "${BASE_URL}/oss/configs/${CONFIG_ID}/test" \
+  -H "Authorization: Bearer $TOKEN")
+echo "配置测试结果: $TEST_RESULT"
+
+# 6. 更新配置
+echo -e "\n6. 测试更新配置..."
+UPDATE_CONFIG_RESULT=$(curl -s -X PUT "${BASE_URL}/oss/configs/${CONFIG_ID}" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"name\": \"更新后的本地存储\",
+    \"storage_type\": \"local\",
+    \"root_path\": \"/tmp/storage_updated\",
+    \"description\": \"已更新的测试用本地存储\"
+  }")
+echo "更新配置结果: $UPDATE_CONFIG_RESULT"
+
+# 7. 创建测试文件
+echo -e "\n7. 准备测试文件..."
+TEST_FILE="/tmp/test_file_$(date +%s).txt"
+echo "这是测试文件内容，用于OSS上传测试" > $TEST_FILE
+echo "测试文件已创建: $TEST_FILE"
+
+# 8. 上传文件
+echo -e "\n8. 测试文件上传..."
+UPLOAD_RESULT=$(curl -s -X POST "${BASE_URL}/oss/files" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@${TEST_FILE}" \
+  -F "config_id=${CONFIG_ID}")
+echo "文件上传结果: $UPLOAD_RESULT"
+
+# 提取文件ID
+FILE_ID=$(echo $UPLOAD_RESULT | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+if [ -z "$FILE_ID" ]; then
+  echo "文件上传失败，无法获取文件ID，使用默认值1"
+  FILE_ID="1"
+fi
+echo "获取到文件ID: $FILE_ID"
+
+# 9. 文件列表查询
+echo -e "\n9. 测试文件列表查询..."
+LIST_RESULT=$(curl -s -X GET "${BASE_URL}/oss/files?page=1&page_size=10" \
+  -H "Authorization: Bearer $TOKEN")
+echo "文件列表查询结果: $LIST_RESULT"
+
+# 10. 获取文件下载链接
+echo -e "\n10. 测试获取文件下载链接..."
+DOWNLOAD_RESULT=$(curl -s -X GET "${BASE_URL}/oss/files/${FILE_ID}/download" \
+  -H "Authorization: Bearer $TOKEN")
+echo "获取下载链接结果: $DOWNLOAD_RESULT"
+
+# 11. 触发文件MD5计算
+echo -e "\n11. 测试触发MD5计算..."
+MD5_TRIGGER_RESULT=$(curl -s -X POST "${BASE_URL}/oss/files/${FILE_ID}/md5" \
+  -H "Authorization: Bearer $TOKEN")
+echo "触发MD5计算结果: $MD5_TRIGGER_RESULT"
+
+# 12. 获取文件MD5值
+echo -e "\n12. 测试获取MD5值..."
+MD5_RESULT=$(curl -s -X GET "${BASE_URL}/oss/files/${FILE_ID}/md5" \
+  -H "Authorization: Bearer $TOKEN")
+echo "获取MD5值结果: $MD5_RESULT"
+
+# 13. 获取配置列表
+echo -e "\n13. 测试获取配置列表..."
+CONFIG_LIST=$(curl -s -X GET "${BASE_URL}/oss/configs?page=1&page_size=10" \
+  -H "Authorization: Bearer $TOKEN")
+echo "配置列表查询结果: $CONFIG_LIST"
+
+# 14. 获取配置详情
+echo -e "\n14. 测试获取配置详情..."
+CONFIG_DETAIL=$(curl -s -X GET "${BASE_URL}/oss/configs/${CONFIG_ID}" \
+  -H "Authorization: Bearer $TOKEN")
+echo "配置详情结果: $CONFIG_DETAIL"
+
+# 15. 设置默认配置
+echo -e "\n15. 测试设置默认配置..."
+DEFAULT_CONFIG_RESULT=$(curl -s -X PUT "${BASE_URL}/oss/configs/${CONFIG_ID}/default" \
+  -H "Authorization: Bearer $TOKEN")
+echo "设置默认配置结果: $DEFAULT_CONFIG_RESULT"
+
+# 16. 初始化分片上传
+echo -e "\n16. 测试初始化分片上传..."
+INIT_RESULT=$(curl -s -X POST "${BASE_URL}/oss/multipart/init" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"file_name\": \"test_large_file.zip\",
+    \"file_size\": 10485760,
+    \"config_id\": ${CONFIG_ID}
+  }")
+echo "初始化分片上传结果: $INIT_RESULT"
+
+# 提取上传ID和对象键
+UPLOAD_ID=$(echo $INIT_RESULT | grep -o '"upload_id":"[^"]*"' | cut -d'"' -f4)
+OBJECT_KEY=$(echo $INIT_RESULT | grep -o '"object_key":"[^"]*"' | cut -d'"' -f4)
+if [ -z "$UPLOAD_ID" ]; then
+  echo "初始化分片上传失败，无法获取上传ID，跳过分片上传测试"
+else
+  echo "获取到上传ID: $UPLOAD_ID"
+  echo "获取到对象键: $OBJECT_KEY"
+  
+  # 17. 获取分片上传URL
+  echo -e "\n17. 测试获取分片上传URL..."
+  PART_URLS=$(curl -s -X GET "${BASE_URL}/oss/multipart/${CONFIG_ID}/urls?upload_id=${UPLOAD_ID}&part_numbers=1,2" \
+    -H "Authorization: Bearer $TOKEN")
+  echo "获取分片上传URL结果: $PART_URLS"
+  
+  # 18. 取消分片上传
+  echo -e "\n18. 测试取消分片上传..."
+  CANCEL_RESULT=$(curl -s -X DELETE "${BASE_URL}/oss/multipart/abort?config_id=${CONFIG_ID}&upload_id=${UPLOAD_ID}" \
+    -H "Authorization: Bearer $TOKEN")
+  echo "取消分片上传结果: $CANCEL_RESULT"
+fi
+
+# 19. 删除文件
+echo -e "\n19. 测试删除文件..."
+DELETE_FILE_RESULT=$(curl -s -X DELETE "${BASE_URL}/oss/files/${FILE_ID}" \
+  -H "Authorization: Bearer $TOKEN")
+echo "删除文件结果: $DELETE_FILE_RESULT"
+
+# 20. 删除配置
+echo -e "\n20. 测试删除配置..."
+DELETE_CONFIG_RESULT=$(curl -s -X DELETE "${BASE_URL}/oss/configs/${CONFIG_ID}" \
+  -H "Authorization: Bearer $TOKEN")
+echo "删除配置结果: $DELETE_CONFIG_RESULT"
+
+# 清理
+rm -f $TEST_FILE
+
+echo -e "\n===== API功能测试完成 ====="
+echo "用户名: $USERNAME"
+echo "配置ID: $CONFIG_ID"
+echo "文件ID: $FILE_ID"
+echo "测试时间: $(date)"
+```
+
+使用方法：
+```bash
+mkdir -p test/shell
+chmod +x test/shell/api_test.sh
+./test/shell/api_test.sh
+```
+
+此脚本将自动测试所有关键接口，并以正确的顺序执行操作（先创建配置，然后上传文件，最后删除资源）。测试过程中会显示每个接口的请求结果，方便排查问题。
+
 ## 压测工具
 
 本方案主要使用 [k6](https://k6.io/) 作为压测工具，k6是一个现代化的负载测试工具，支持HTTP/HTTPS、WebSocket等协议的压测。
@@ -24,6 +466,371 @@ sudo apt-get install k6
 sudo yum install https://dl.k6.io/rpm/repo.rpm
 sudo yum install k6
 ```
+
+### 使用curl命令进行简单压测
+
+如果不想安装专业压测工具，可以使用curl配合shell脚本进行简单的压测。这种方法适用于快速验证接口的可用性和简单的负载测试。
+
+#### 1. 基本的curl压测脚本
+
+```bash
+#!/bin/bash
+# test/shell/simple_load_test.sh
+
+# 设置参数
+URL="http://localhost:8080/api/v1/oss/files"
+TOKEN="your-auth-token-here"
+REQUESTS=100  # 总请求数
+CONCURRENCY=10  # 并发数
+
+# 创建临时文件存储结果
+TEMP_FILE=$(mktemp)
+
+# 压测函数
+run_test() {
+  local start_time=$(date +%s.%N)
+  
+  # 发送请求
+  curl -s -w "%{http_code},%{time_total}\n" -o /dev/null \
+    -H "Authorization: Bearer $TOKEN" \
+    "$URL" >> "$TEMP_FILE"
+    
+  local end_time=$(date +%s.%N)
+  echo "完成请求: $1, 耗时: $(echo "$end_time - $start_time" | bc) 秒"
+}
+
+# 显示开始信息
+echo "开始对 $URL 进行压测"
+echo "总请求数: $REQUESTS, 并发数: $CONCURRENCY"
+
+# 记录开始时间
+TEST_START=$(date +%s.%N)
+
+# 并发执行请求
+for i in $(seq 1 $REQUESTS); do
+  # 控制并发数
+  if [ $(jobs -r | wc -l) -ge $CONCURRENCY ]; then
+    wait -n  # 等待一个任务完成
+  fi
+  
+  run_test $i &  # 后台执行
+done
+
+# 等待所有请求完成
+wait
+
+# 记录结束时间
+TEST_END=$(date +%s.%N)
+TOTAL_TIME=$(echo "$TEST_END - $TEST_START" | bc)
+
+# 分析结果
+SUCCESSFUL=$(grep -c "^200," "$TEMP_FILE")
+TOTAL=$(wc -l < "$TEMP_FILE")
+SUCCESS_RATE=$(echo "scale=2; $SUCCESSFUL / $TOTAL * 100" | bc)
+
+# 计算响应时间统计
+echo "分析响应时间..."
+TIMES=$(cut -d',' -f2 "$TEMP_FILE")
+TOTAL_RESP_TIME=$(echo "$TIMES" | paste -sd+ | bc)
+AVG_RESP_TIME=$(echo "scale=3; $TOTAL_RESP_TIME / $TOTAL" | bc)
+
+# 计算RPS
+RPS=$(echo "scale=2; $REQUESTS / $TOTAL_TIME" | bc)
+
+# 输出结果
+echo "=============== 压测结果 ==============="
+echo "总请求数: $REQUESTS"
+echo "并发数: $CONCURRENCY"
+echo "总耗时: $TOTAL_TIME 秒"
+echo "成功请求数: $SUCCESSFUL"
+echo "成功率: $SUCCESS_RATE%"
+echo "平均响应时间: $AVG_RESP_TIME 秒"
+echo "每秒请求数(RPS): $RPS"
+echo "========================================="
+
+# 清理临时文件
+rm "$TEMP_FILE"
+```
+
+执行权限和运行：
+```bash
+chmod +x test/shell/simple_load_test.sh
+./test/shell/simple_load_test.sh
+```
+
+#### 2. 登录并进行文件上传压测
+
+```bash
+#!/bin/bash
+# test/shell/file_upload_test.sh
+
+# 设置参数
+LOGIN_URL="http://localhost:8080/api/v1/auth/login"
+UPLOAD_URL="http://localhost:8080/api/v1/oss/files"
+USERNAME="admin"
+PASSWORD="admin123"
+CONFIG_ID="1"
+REQUESTS=20  # 总请求数
+CONCURRENCY=5  # 并发数
+FILE_SIZE=10240  # 10KB
+
+# 创建临时文件存储结果
+TEMP_FILE=$(mktemp)
+TEST_FILE=$(mktemp)
+
+# 创建测试文件
+dd if=/dev/urandom of=$TEST_FILE bs=1024 count=$((FILE_SIZE/1024)) 2>/dev/null
+
+# 获取认证令牌
+echo "登录获取Token..."
+TOKEN=$(curl -s -X POST $LOGIN_URL \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" | 
+  grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$TOKEN" ]; then
+  echo "获取Token失败，请检查登录接口"
+  exit 1
+fi
+echo "获取Token成功"
+
+# 压测函数
+run_upload_test() {
+  local start_time=$(date +%s.%N)
+  
+  # 发送上传请求
+  local response=$(curl -s -w ",HTTP_CODE:%{http_code},TIME:%{time_total}" \
+    -H "Authorization: Bearer $TOKEN" \
+    -F "file=@$TEST_FILE" \
+    -F "config_id=$CONFIG_ID" \
+    "$UPLOAD_URL")
+    
+  local end_time=$(date +%s.%N)
+  local duration=$(echo "$end_time - $start_time" | bc)
+  
+  # 提取HTTP状态码和响应时间
+  local http_code=$(echo "$response" | grep -o 'HTTP_CODE:[0-9]*' | cut -d':' -f2)
+  local time_total=$(echo "$response" | grep -o 'TIME:[0-9.]*' | cut -d':' -f2)
+  
+  echo "$http_code,$time_total" >> "$TEMP_FILE"
+  echo "完成请求: $1, HTTP状态: $http_code, 耗时: $duration 秒"
+}
+
+# 显示开始信息
+echo "开始对 $UPLOAD_URL 进行文件上传压测"
+echo "总请求数: $REQUESTS, 并发数: $CONCURRENCY, 文件大小: $FILE_SIZE 字节"
+
+# 记录开始时间
+TEST_START=$(date +%s.%N)
+
+# 并发执行请求
+for i in $(seq 1 $REQUESTS); do
+  # 控制并发数
+  if [ $(jobs -r | wc -l) -ge $CONCURRENCY ]; then
+    wait -n  # 等待一个任务完成
+  fi
+  
+  run_upload_test $i &  # 后台执行
+done
+
+# 等待所有请求完成
+wait
+
+# 记录结束时间
+TEST_END=$(date +%s.%N)
+TOTAL_TIME=$(echo "$TEST_END - $TEST_START" | bc)
+
+# 分析结果
+SUCCESSFUL=$(grep -c "^200," "$TEMP_FILE")
+TOTAL=$(wc -l < "$TEMP_FILE")
+SUCCESS_RATE=$(echo "scale=2; $SUCCESSFUL / $TOTAL * 100" | bc)
+
+# 计算响应时间统计
+echo "分析响应时间..."
+TIMES=$(cut -d',' -f2 "$TEMP_FILE")
+TOTAL_RESP_TIME=$(echo "$TIMES" | paste -sd+ | bc)
+AVG_RESP_TIME=$(echo "scale=3; $TOTAL_RESP_TIME / $TOTAL" | bc)
+
+# 计算RPS和吞吐量
+RPS=$(echo "scale=2; $REQUESTS / $TOTAL_TIME" | bc)
+THROUGHPUT=$(echo "scale=2; $RPS * $FILE_SIZE / 1024" | bc)
+
+# 输出结果
+echo "=============== 文件上传压测结果 ==============="
+echo "总请求数: $REQUESTS"
+echo "并发数: $CONCURRENCY"
+echo "文件大小: $FILE_SIZE 字节"
+echo "总耗时: $TOTAL_TIME 秒"
+echo "成功请求数: $SUCCESSFUL"
+echo "成功率: $SUCCESS_RATE%"
+echo "平均响应时间: $AVG_RESP_TIME 秒"
+echo "每秒请求数(RPS): $RPS"
+echo "吞吐量: $THROUGHPUT KB/s"
+echo "================================================="
+
+# 清理临时文件
+rm "$TEMP_FILE" "$TEST_FILE"
+```
+
+#### 3. 使用ApacheBench (ab) 进行简单压测
+
+如果系统中安装了Apache工具套件，也可以使用更专业的ab工具：
+
+```bash
+# 首先使用curl登录获取token
+TOKEN=$(curl -s -X POST "http://localhost:8080/api/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | 
+  grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+# 使用ab进行文件列表查询测试
+ab -n 1000 -c 50 -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/v1/oss/files?page=1&page_size=10"
+
+# 带JSON请求体的POST请求测试
+echo '{"name":"test-config","region":"us-east-1","bucket":"test-bucket","storage_type":"s3"}' > /tmp/post_data.json
+ab -n 500 -c 20 -T "application/json" -H "Authorization: Bearer $TOKEN" \
+  -p /tmp/post_data.json "http://localhost:8080/api/v1/oss/configs"
+```
+
+#### 4. 多轮次递增压测脚本
+
+以下脚本执行多轮次压测，并在每轮逐步增加并发数：
+
+```bash
+#!/bin/bash
+# test/shell/incremental_load_test.sh
+
+# 压测配置
+URL="http://localhost:8080/api/v1/oss/files"
+USERNAME="admin"
+PASSWORD="admin123"
+LOGIN_URL="http://localhost:8080/api/v1/auth/login"
+ROUNDS=5
+START_CONCURRENCY=10
+INCREMENT=10
+REQUESTS_PER_ROUND=100
+
+# 获取认证令牌
+echo "登录获取Token..."
+TOKEN=$(curl -s -X POST $LOGIN_URL \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" | 
+  grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$TOKEN" ]; then
+  echo "获取Token失败，请检查登录接口"
+  exit 1
+fi
+
+# 结果文件
+RESULTS_FILE="test_results_$(date +%Y%m%d_%H%M%S).csv"
+echo "并发数,总请求数,成功请求数,成功率,总耗时(秒),平均响应时间(秒),RPS" > $RESULTS_FILE
+
+# 循环执行压测轮次
+for ((round=1; round<=ROUNDS; round++)); do
+  CONCURRENCY=$((START_CONCURRENCY + (round-1)*INCREMENT))
+  
+  echo "===== 开始第 $round 轮压测 ====="
+  echo "并发数: $CONCURRENCY, 请求数: $REQUESTS_PER_ROUND"
+  
+  # 临时结果文件
+  TEMP_FILE=$(mktemp)
+  
+  # 记录开始时间
+  TEST_START=$(date +%s.%N)
+  
+  # 执行并发请求
+  for ((i=1; i<=REQUESTS_PER_ROUND; i++)); do
+    # 控制并发数
+    if [ $(jobs -r | wc -l) -ge $CONCURRENCY ]; then
+      wait -n
+    fi
+    
+    # 发送请求
+    (curl -s -w "%{http_code},%{time_total}\n" -o /dev/null \
+      -H "Authorization: Bearer $TOKEN" \
+      "$URL" >> "$TEMP_FILE") &
+  done
+  
+  # 等待所有请求完成
+  wait
+  
+  # 记录结束时间
+  TEST_END=$(date +%s.%N)
+  TOTAL_TIME=$(echo "$TEST_END - $TEST_START" | bc)
+  
+  # 分析结果
+  SUCCESSFUL=$(grep -c "^200," "$TEMP_FILE")
+  TOTAL=$(wc -l < "$TEMP_FILE")
+  SUCCESS_RATE=$(echo "scale=2; $SUCCESSFUL / $TOTAL * 100" | bc)
+  
+  # 计算响应时间统计
+  TIMES=$(cut -d',' -f2 "$TEMP_FILE")
+  TOTAL_RESP_TIME=$(echo "$TIMES" | paste -sd+ | bc)
+  AVG_RESP_TIME=$(echo "scale=3; $TOTAL_RESP_TIME / $TOTAL" | bc)
+  
+  # 计算RPS
+  RPS=$(echo "scale=2; $REQUESTS_PER_ROUND / $TOTAL_TIME" | bc)
+  
+  # 输出结果
+  echo "=============== 第 $round 轮压测结果 ==============="
+  echo "并发数: $CONCURRENCY"
+  echo "总请求数: $REQUESTS_PER_ROUND"
+  echo "成功请求数: $SUCCESSFUL"
+  echo "成功率: $SUCCESS_RATE%"
+  echo "总耗时: $TOTAL_TIME 秒"
+  echo "平均响应时间: $AVG_RESP_TIME 秒"
+  echo "每秒请求数(RPS): $RPS"
+  echo "================================================="
+  
+  # 保存结果到CSV
+  echo "$CONCURRENCY,$REQUESTS_PER_ROUND,$SUCCESSFUL,$SUCCESS_RATE%,$TOTAL_TIME,$AVG_RESP_TIME,$RPS" >> $RESULTS_FILE
+  
+  # 清理临时文件
+  rm "$TEMP_FILE"
+  
+  # 每轮之间休息一下，避免过度压力
+  if [ $round -lt $ROUNDS ]; then
+    echo "休息5秒后开始下一轮..."
+    sleep 5
+  fi
+done
+
+echo "压测完成，结果已保存到: $RESULTS_FILE"
+
+# 可以使用以下命令生成简单的结果图表（需要安装gnuplot）
+if command -v gnuplot >/dev/null 2>&1; then
+  echo "使用gnuplot生成结果图表..."
+  
+  # 生成gnuplot脚本
+  cat > plot.gp << EOL
+set terminal png size 800,600
+set output "test_results_$(date +%Y%m%d_%H%M%S).png"
+set title "API压测结果"
+set xlabel "并发数"
+set ylabel "每秒请求数(RPS)"
+set y2label "平均响应时间(秒)"
+set y2tics
+set grid
+plot "$RESULTS_FILE" using 1:7 with linespoints title "RPS", \
+     "$RESULTS_FILE" using 1:6 with linespoints axes x1y2 title "响应时间"
+EOL
+
+  # 执行gnuplot生成图表
+  gnuplot plot.gp
+  rm plot.gp
+  echo "图表生成完成"
+fi
+```
+
+#### 使用curl压测的注意事项
+
+1. **资源消耗**: 这些脚本在本地执行时会消耗较多系统资源，特别是在高并发测试时
+2. **网络因素**: 本地网络延迟可能影响测试结果
+3. **适用场景**: 这些方法适合开发和测试环境下的简单验证，不适合正式的性能测试
+4. **结果精度**: 结果不如专业压测工具精确，但足以提供基本的性能评估
+5. **Token有效期**: 注意登录获取的token可能有效期限制，长时间测试可能需要定期刷新
 
 ## 压测指标
 

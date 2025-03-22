@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/auth"
 	"github.com/myysophia/ossmanager-backend/internal/config"
@@ -8,7 +9,6 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"go.uber.org/zap"
 	"strings"
-	"errors"
 )
 
 // AuthMiddleware 认证中间件
@@ -32,8 +32,8 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// 获取JWT配置
 		jwtConfig := &config.JWTConfig{
-			SecretKey: "your-secret-key", // 这应该从配置中读取
-			ExpiresIn: 3600,              // 过期时间，单位：秒
+			SecretKey: "123456", // 这应该从配置中读取
+			ExpiresIn: 3600,     // 过期时间，单位：秒
 			Issuer:    "oss-manager-backend",
 		}
 
