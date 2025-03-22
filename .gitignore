@@ -8,5 +8,5 @@ configs/
 logs
 test
 cmd/__debug_bin*
-*.sql
 *.log
+

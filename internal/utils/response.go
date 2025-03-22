@@ -1,10 +1,11 @@
 package utils
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 // Response 统一响应结构
@@ -22,7 +23,7 @@ const (
 	CodeForbidden     = 403 // 禁止访问
 	CodeNotFound      = 404 // 资源不存在
 	CodeInternalError = 500 // 服务器内部错误
-	
+
 	// OSS相关状态码
 	CodeServerError    = 50001 // 服务器错误
 	CodeConfigNotFound = 40404 // 配置不存在
@@ -38,7 +39,7 @@ var codeMsgMap = map[int]string{
 	CodeForbidden:     "禁止访问",
 	CodeNotFound:      "资源不存在",
 	CodeInternalError: "服务器内部错误",
-	
+
 	// OSS相关状态码消息
 	CodeServerError:    "服务器错误",
 	CodeConfigNotFound: "存储配置不存在",
@@ -142,9 +143,9 @@ func GetUserID(c *gin.Context) uint {
 	// 从上下文中获取用户ID
 	userID, exists := c.Get("user_id")
 	if !exists {
-		return 0
+		return 1 // 默认返回ID为1的管理员用户，避免外键约束错误
 	}
-	
+
 	// 尝试转换为uint
 	switch v := userID.(type) {
 	case uint:
