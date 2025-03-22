@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
-	"github.com/spf13/viper"
 	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 type Config struct {
@@ -20,8 +22,8 @@ type AppConfig struct {
 	Env           string
 	Host          string
 	Port          int
-	ReadTimeout   int   `mapstructure:"read_timeout"`
-	WriteTimeout  int   `mapstructure:"write_timeout"`
+	ReadTimeout   int    `mapstructure:"read_timeout"`
+	WriteTimeout  int    `mapstructure:"write_timeout"`
 	UploadTempDir string `mapstructure:"upload_temp_dir"`
 	MaxFileSize   int64  `mapstructure:"max_file_size"`
 	Workers       int    `mapstructure:"workers"` // MD5计算的工作协程数量
@@ -117,7 +119,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	ossConfigPath := "configs/oss.yaml"
 	ossViper := viper.New()
 	ossViper.SetConfigFile(ossConfigPath)
-	
+
 	if err := ossViper.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("读取 OSS 配置文件失败: %w", err)
 	}
@@ -139,17 +141,44 @@ func LoadConfigWithEnv(configPath string, env string) (*Config, error) {
 	}
 
 	v := viper.New()
-	
-	// 设置搜索路径和配置文件
-	if isDir(configPath) {
-		// 如果是目录，设置搜索路径
-		v.AddConfigPath(configPath)
-		v.SetConfigName("app") // 基本配置文件
-	} else {
-		// 如果是具体文件，直接设置
-		v.SetConfigFile(configPath)
+
+	// 尝试多个可能的配置路径
+	configPaths := []string{
+		configPath,      // 原始传入路径
+		"./configs",     // 相对于运行目录
+		"../configs",    // 上一级目录
+		"../../configs", // 上两级目录
 	}
-	
+
+	configFound := false
+	var configFile string
+
+	// 尝试查找配置文件
+	for _, path := range configPaths {
+		if isDir(path) {
+			baseConfigFile := fmt.Sprintf("%s/app.yaml", path)
+			if fileExists(baseConfigFile) {
+				v.AddConfigPath(path)
+				v.SetConfigName("app")
+				configFile = baseConfigFile
+				configFound = true
+				break
+			}
+		} else if fileExists(path) {
+			v.SetConfigFile(path)
+			configFile = path
+			configFound = true
+			break
+		}
+	}
+
+	if !configFound {
+		return nil, fmt.Errorf("无法找到配置文件，已尝试路径: %v", configPaths)
+	}
+
+	// 输出找到的配置文件路径，便于调试
+	fmt.Printf("使用配置文件: %s\n", configFile)
+
 	v.AutomaticEnv()
 
 	// 读取基本配置
@@ -158,13 +187,26 @@ func LoadConfigWithEnv(configPath string, env string) (*Config, error) {
 	}
 
 	// 读取环境特定配置
-	if isDir(configPath) && env != "" {
-		envConfigName := fmt.Sprintf("app.%s", env)
-		v.SetConfigName(envConfigName)
-		// 尝试合并环境配置（如果存在）
-		if err := v.MergeInConfig(); err != nil {
-			// 如果环境配置不存在，只记录信息，不中断流程
-			fmt.Printf("找不到环境配置文件 %s.yaml，将使用默认配置\n", envConfigName)
+	if env != "" && v.ConfigFileUsed() != "" {
+		configDir := filepath.Dir(v.ConfigFileUsed())
+		envConfigFile := fmt.Sprintf("%s/app.%s.yaml", configDir, env)
+
+		if fileExists(envConfigFile) {
+			envViper := viper.New()
+			envViper.SetConfigFile(envConfigFile)
+
+			if err := envViper.ReadInConfig(); err != nil {
+				return nil, fmt.Errorf("读取环境配置文件失败: %w", err)
+			}
+
+			// 合并环境配置
+			if err := v.MergeConfigMap(envViper.AllSettings()); err != nil {
+				return nil, fmt.Errorf("合并环境配置失败: %w", err)
+			}
+
+			fmt.Printf("已合并环境配置: %s\n", envConfigFile)
+		} else {
+			fmt.Printf("找不到环境配置文件: %s，将使用默认配置\n", envConfigFile)
 		}
 	}
 
@@ -175,40 +217,44 @@ func LoadConfigWithEnv(configPath string, env string) (*Config, error) {
 	}
 
 	// 加载 OSS 配置
-	ossViper := viper.New()
-	
-	// 设置 OSS 配置路径
-	if isDir(configPath) {
-		ossConfigPath := fmt.Sprintf("%s/oss.yaml", configPath)
-		ossViper.SetConfigFile(ossConfigPath)
-	} else {
-		ossViper.SetConfigFile("configs/oss.yaml")
-	}
-	
-	if err := ossViper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("读取 OSS 配置文件失败: %w", err)
-	}
-	
-	// 尝试加载环境特定的 OSS 配置
-	if isDir(configPath) && env != "" {
-		ossEnvConfigPath := fmt.Sprintf("%s/oss.%s.yaml", configPath, env)
-		if fileExists(ossEnvConfigPath) {
-			ossEnvViper := viper.New()
-			ossEnvViper.SetConfigFile(ossEnvConfigPath)
-			
-			if err := ossEnvViper.ReadInConfig(); err != nil {
-				return nil, fmt.Errorf("读取环境 OSS 配置文件失败: %w", err)
-			}
-			
-			// 合并 OSS 环境配置
-			if err := ossViper.MergeConfigMap(ossEnvViper.AllSettings()); err != nil {
-				return nil, fmt.Errorf("合并环境 OSS 配置失败: %w", err)
+	configDir := filepath.Dir(v.ConfigFileUsed())
+	ossConfigFile := fmt.Sprintf("%s/oss.yaml", configDir)
+
+	if fileExists(ossConfigFile) {
+		ossViper := viper.New()
+		ossViper.SetConfigFile(ossConfigFile)
+
+		if err := ossViper.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("读取 OSS 配置文件失败: %w", err)
+		}
+
+		fmt.Printf("已加载OSS配置: %s\n", ossConfigFile)
+
+		// 尝试加载环境特定的 OSS 配置
+		if env != "" {
+			ossEnvConfigFile := fmt.Sprintf("%s/oss.%s.yaml", configDir, env)
+			if fileExists(ossEnvConfigFile) {
+				ossEnvViper := viper.New()
+				ossEnvViper.SetConfigFile(ossEnvConfigFile)
+
+				if err := ossEnvViper.ReadInConfig(); err != nil {
+					return nil, fmt.Errorf("读取环境 OSS 配置文件失败: %w", err)
+				}
+
+				// 合并 OSS 环境配置
+				if err := ossViper.MergeConfigMap(ossEnvViper.AllSettings()); err != nil {
+					return nil, fmt.Errorf("合并环境 OSS 配置失败: %w", err)
+				}
+
+				fmt.Printf("已合并OSS环境配置: %s\n", ossEnvConfigFile)
 			}
 		}
-	}
 
-	if err := ossViper.Unmarshal(&config.OSS); err != nil {
-		return nil, fmt.Errorf("解析 OSS 配置文件失败: %w", err)
+		if err := ossViper.Unmarshal(&config.OSS); err != nil {
+			return nil, fmt.Errorf("解析 OSS 配置文件失败: %w", err)
+		}
+	} else {
+		fmt.Printf("找不到OSS配置文件: %s，将使用默认OSS配置\n", ossConfigFile)
 	}
 
 	globalConfig = config
@@ -262,4 +308,4 @@ func (c *AWSS3Config) GetOSSURLExpiration() time.Duration {
 
 func (c *CloudflareR2Config) GetOSSURLExpiration() time.Duration {
 	return time.Duration(c.URLExpireTime) * time.Second
-} 
+}

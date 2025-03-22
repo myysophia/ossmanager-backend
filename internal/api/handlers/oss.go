@@ -1,13 +1,14 @@
 package handlers
 
 import (
+	"path"
+	"strconv"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
-	"path"
-	"strconv"
-	"time"
 )
 
 // OSSHandler OSS处理器
@@ -380,7 +381,20 @@ func getUserID(c *gin.Context) uint {
 
 // getConfigID 根据存储类型获取配置ID
 func getConfigID(storageType string) uint {
-	// 这里应该查询数据库获取对应存储类型的配置ID
-	// 简化处理，返回一个默认值
-	return 1
+	// 根据存储类型查询对应配置ID
+	var configID uint = 1 // 默认值
+
+	// 简单示例：根据存储类型返回不同的ID
+	switch storageType {
+	case "s3":
+		configID = 1
+	case "oss":
+		configID = 2
+	case "cos":
+		configID = 3
+	case "local":
+		configID = 4
+	}
+
+	return configID
 }

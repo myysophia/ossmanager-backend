@@ -3,6 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/myysophia/ossmanager-backend/internal/api"
 	"github.com/myysophia/ossmanager-backend/internal/config"
 	"github.com/myysophia/ossmanager-backend/internal/db"
@@ -10,11 +16,6 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
 	"go.uber.org/zap"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 func main() {

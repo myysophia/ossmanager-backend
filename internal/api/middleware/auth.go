@@ -2,13 +2,14 @@ package middleware
 
 import (
 	"errors"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/auth"
 	"github.com/myysophia/ossmanager-backend/internal/config"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"go.uber.org/zap"
-	"strings"
 )
 
 // AuthMiddleware 认证中间件
@@ -31,14 +32,11 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		// 获取JWT配置
-		jwtConfig := &config.JWTConfig{
-			SecretKey: "123456", // 这应该从配置中读取
-			ExpiresIn: 3600,     // 过期时间，单位：秒
-			Issuer:    "oss-manager-backend",
-		}
+		jwtConfig := config.GetConfig().JWT
+		logger.Debug("JWT配置", zap.String("issuer", jwtConfig.Issuer), zap.Int("expiresIn", jwtConfig.ExpiresIn))
 
 		// 解析JWT令牌
-		claims, err := auth.ParseToken(parts[1], jwtConfig)
+		claims, err := auth.ParseToken(parts[1], &jwtConfig)
 		if err != nil {
 			logger.Warn("解析JWT令牌失败", zap.Error(err))
 			utils.ResponseError(c, utils.CodeUnauthorized, errors.New("无效的认证令牌"))
