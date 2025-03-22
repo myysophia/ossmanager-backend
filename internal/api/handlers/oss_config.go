@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
+	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
-	"strconv"
+	"go.uber.org/zap"
 )
 
 // OSSConfigHandler OSS配置处理器
@@ -124,19 +127,92 @@ func (h *OSSConfigHandler) DeleteConfig(c *gin.Context) {
 
 // GetConfigList 获取存储配置列表
 func (h *OSSConfigHandler) GetConfigList(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	// 获取分页参数
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
+
+	// 转换并验证分页参数
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page <= 0 {
+		page = 1
+		logger.Warn("无效的page参数，使用默认值1", zap.String("原始值", pageStr))
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize <= 0 {
+		pageSize = 10
+		logger.Warn("无效的page_size参数，使用默认值10", zap.String("原始值", pageSizeStr))
+	}
+
+	// 记录请求参数
+	logger.Info("获取OSS配置列表请求",
+		zap.Int("page", page),
+		zap.Int("pageSize", pageSize),
+		zap.String("path", c.Request.URL.Path),
+		zap.String("method", c.Request.Method))
 
 	var total int64
 	if err := db.GetDB().Model(&models.OSSConfig{}).Count(&total).Error; err != nil {
+		logger.Error("获取配置总数失败", zap.Error(err))
 		h.InternalError(c, "获取配置总数失败")
 		return
 	}
 
+	// 记录总数
+	logger.Info("OSS配置总数", zap.Int64("total", total))
+
 	var configs []models.OSSConfig
-	if err := db.GetDB().Offset((page - 1) * pageSize).Limit(pageSize).Find(&configs).Error; err != nil {
+
+	// 增加详细SQL日志
+	query := db.GetDB().Debug()
+
+	// 仅当有数据且需要分页时应用分页
+	if total > 0 {
+		offset := (page - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+		logger.Info("应用分页", zap.Int("offset", offset), zap.Int("limit", pageSize))
+	}
+
+	if err := query.Find(&configs).Error; err != nil {
+		logger.Error("获取配置列表失败", zap.Error(err))
 		h.InternalError(c, "获取配置列表失败")
 		return
+	}
+
+	// 记录查询结果
+	logger.Info("OSS配置查询结果",
+		zap.Int("结果数量", len(configs)),
+		zap.Any("配置列表", configs))
+
+	// 检查是否启用了软删除但查询未排除已删除记录
+	if total > 0 && len(configs) == 0 {
+		logger.Warn("发现异常：Count返回有数据但Find查不到记录，尝试不使用软删除查询")
+
+		// 尝试不使用软删除查询
+		var allConfigs []models.OSSConfig
+		if err := db.GetDB().Debug().Unscoped().Find(&allConfigs).Error; err != nil {
+			logger.Error("不使用软删除查询失败", zap.Error(err))
+		} else {
+			for i, config := range allConfigs {
+				logger.Info("记录详情",
+					zap.Int("索引", i),
+					zap.Uint("ID", config.ID),
+					zap.String("名称", config.Name),
+					zap.String("类型", config.StorageType),
+					zap.Bool("是否默认", config.IsDefault),
+					zap.Time("创建时间", config.CreatedAt),
+					zap.Time("更新时间", config.UpdatedAt),
+					zap.Any("软删除时间", config.DeletedAt))
+			}
+		}
+
+		// 查询是否记录被软删除
+		var deletedConfigs []models.OSSConfig
+		if err := db.GetDB().Debug().Unscoped().Where("deleted_at IS NOT NULL").Find(&deletedConfigs).Error; err != nil {
+			logger.Error("查询软删除记录失败", zap.Error(err))
+		} else {
+			logger.Info("软删除记录数量", zap.Int("count", len(deletedConfigs)))
+		}
 	}
 
 	h.Success(c, gin.H{
