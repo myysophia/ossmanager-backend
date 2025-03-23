@@ -1398,4 +1398,525 @@ volumes:
 
 - [k6 官方文档](https://k6.io/docs/)
 - [Grafana k6 Dashboard](https://grafana.com/grafana/dashboards/2587)
-- [性能测试最佳实践](https://k6.io/docs/testing-guides/api-load-testing) 
+- [性能测试最佳实践](https://k6.io/docs/testing-guides/api-load-testing)
+
+## OSS管理系统分片上传测试指南
+
+本文档提供了OSS管理系统分片上传功能的详细测试方法和示例，帮助开发者和测试人员了解如何测试大文件分片上传功能。
+
+### 1. 分片上传流程概述
+
+OSS管理系统的分片上传功能允许用户将大文件分成多个片段分别上传，从而提高上传成功率和效率。完整的分片上传流程包括以下步骤：
+
+1. **初始化分片上传**：获取上传ID和对象键
+2. **上传分片**：使用初始化返回的信息，分别上传各个分片
+3. **完成分片上传**：所有分片上传完成后，通知服务器合并分片
+4. **（可选）取消分片上传**：在任何时候可以取消分片上传
+
+### 2. API接口说明
+
+分片上传相关API接口如下：
+
+| 接口 | 请求方法 | 路径 | 功能描述 |
+|-----|---------|-----|---------|
+| 初始化分片上传 | POST | /api/v1/oss/multipart/init | 获取上传ID和对象键 |
+| 完成分片上传 | POST | /api/v1/oss/multipart/complete | 所有分片上传完成后调用 |
+| 取消分片上传 | DELETE | /api/v1/oss/multipart/abort | 取消分片上传 |
+
+### 3. 测试准备
+
+在测试分片上传功能前，需要做以下准备：
+
+1. 确保已经获取有效的认证令牌（通过登录接口获取）
+2. 准备一个测试用的大文件（建议大于10MB）
+3. 准备分片上传所需的工具（如curl、Postman或自定义脚本）
+4. 确认已创建有效的OSS配置（使用OSS配置管理接口）
+
+### 4. 初始化分片上传测试
+
+#### 使用curl测试初始化分片上传
+
+```bash
+# 设置认证令牌
+TOKEN="您的认证令牌"
+
+# 设置配置ID（替换为您的实际配置ID）
+CONFIG_ID="1"
+
+# 初始化分片上传
+curl -X POST "http://localhost:8080/api/v1/oss/multipart/init" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "config_id": "'"$CONFIG_ID"'",
+    "file_name": "large_test_file.zip",
+    "file_size": 10485760
+  }'
+```
+
+#### 预期响应
+
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "upload_id": "abc123def456ghi789",
+    "object_key": "uploads/202401010001_large_test_file.zip"
+  }
+}
+```
+
+#### 检查点
+
+- 响应状态码应为200
+- 返回的数据中包含`upload_id`和`object_key`，这两个值需要保存用于后续操作
+
+### 5. 获取分片上传URL测试
+
+对于支持直接上传到对象存储的场景，需要为每个分片获取一个预签名URL。
+
+#### 使用curl测试获取分片上传URL
+
+```bash
+# 使用上一步获取的upload_id和对象键
+UPLOAD_ID="上一步获取的upload_id"
+OBJECT_KEY="上一步获取的object_key"
+
+# 获取分片上传URL
+curl -X GET "http://localhost:8080/api/v1/oss/multipart/${CONFIG_ID}/urls?upload_id=${UPLOAD_ID}&part_numbers=1,2,3" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 预期响应
+
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "urls": [
+      {
+        "part_number": 1,
+        "url": "https://bucket.s3.region.amazonaws.com/object_key?partNumber=1&uploadId=upload_id&X-Amz-Algorithm=..."
+      },
+      {
+        "part_number": 2,
+        "url": "https://bucket.s3.region.amazonaws.com/object_key?partNumber=2&uploadId=upload_id&X-Amz-Algorithm=..."
+      },
+      {
+        "part_number": 3,
+        "url": "https://bucket.s3.region.amazonaws.com/object_key?partNumber=3&uploadId=upload_id&X-Amz-Algorithm=..."
+      }
+    ]
+  }
+}
+```
+
+#### 检查点
+
+- 响应状态码应为200
+- 返回的数据中包含与请求的part_numbers数量相同的URL条目
+
+### 6. 上传分片测试
+
+使用获取的预签名URL上传各个分片。这一步通常直接与云存储服务交互，不经过我们的服务器。
+
+#### 使用curl测试上传分片
+
+```bash
+# 分割文件（Linux环境）
+split -b 5M large_test_file.zip part_
+
+# 上传第一个分片并保存返回的ETag（示例使用AWS S3格式）
+PART1_ETAG=$(curl -X PUT -T part_aa "第一个分片的预签名URL" -H "Content-Type: application/octet-stream" -v 2>&1 | grep -i "ETag" | awk '{print $3}' | tr -d '"')
+
+# 上传第二个分片并保存返回的ETag
+PART2_ETAG=$(curl -X PUT -T part_ab "第二个分片的预签名URL" -H "Content-Type: application/octet-stream" -v 2>&1 | grep -i "ETag" | awk '{print $3}' | tr -d '"')
+
+# 上传第三个分片并保存返回的ETag
+PART3_ETAG=$(curl -X PUT -T part_ac "第三个分片的预签名URL" -H "Content-Type: application/octet-stream" -v 2>&1 | grep -i "ETag" | awk '{print $3}' | tr -d '"')
+
+# 打印所有ETag
+echo "Part 1 ETag: $PART1_ETAG"
+echo "Part 2 ETag: $PART2_ETAG"
+echo "Part 3 ETag: $PART3_ETAG"
+```
+
+#### 检查点
+
+- 每个分片上传应返回一个ETag
+- 所有分片上传请求应返回200或204状态码
+
+### 7. 完成分片上传测试
+
+所有分片都上传完成后，调用完成分片上传接口。
+
+#### 使用curl测试完成分片上传
+
+```bash
+# 使用之前保存的upload_id、object_key和ETags
+curl -X POST "http://localhost:8080/api/v1/oss/multipart/complete" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "config_id": "'"$CONFIG_ID"'",
+    "upload_id": "'"$UPLOAD_ID"'",
+    "object_key": "'"$OBJECT_KEY"'",
+    "parts": ["'"$PART1_ETAG"'", "'"$PART2_ETAG"'", "'"$PART3_ETAG"'"]
+  }'
+```
+
+#### 预期响应
+
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "id": 123,
+    "file_name": "large_test_file.zip",
+    "file_size": 15728640,
+    "storage_type": "AWS_S3",
+    "object_key": "uploads/202401010001_large_test_file.zip",
+    "download_url": "https://bucket.s3.region.amazonaws.com/object_key?X-Amz-Algorithm=...",
+    "created_at": "2024-01-01T12:00:00Z"
+  }
+}
+```
+
+#### 检查点
+
+- 响应状态码应为200
+- 返回的数据中包含已合并文件的信息，包括ID、文件名、大小、下载URL等
+
+### 8. 取消分片上传测试
+
+测试取消分片上传功能。
+
+#### 使用curl测试取消分片上传
+
+```bash
+# 初始化一个新的分片上传用于测试取消功能
+NEW_UPLOAD_RESPONSE=$(curl -s -X POST "http://localhost:8080/api/v1/oss/multipart/init" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "config_id": "'"$CONFIG_ID"'",
+    "file_name": "to_be_aborted.zip",
+    "file_size": 10485760
+  }')
+
+# 提取新的upload_id
+NEW_UPLOAD_ID=$(echo $NEW_UPLOAD_RESPONSE | grep -o '"upload_id":"[^"]*"' | cut -d'"' -f4)
+
+# 取消分片上传
+curl -X DELETE "http://localhost:8080/api/v1/oss/multipart/abort?config_id=${CONFIG_ID}&upload_id=${NEW_UPLOAD_ID}" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### 预期响应
+
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {}
+}
+```
+
+#### 检查点
+
+- 响应状态码应为200
+- 取消成功后，使用相同的upload_id尝试完成上传应该失败
+
+### 9. 自动化测试脚本
+
+在`test/shell/`目录下创建以下脚本，可以用来测试分片上传的完整流程：
+
+```bash
+#!/bin/bash
+# test/shell/multipart_upload_test.sh
+
+# 配置信息
+BASE_URL="http://localhost:8080/api/v1"
+USERNAME="admin"
+PASSWORD="admin123"
+CONFIG_ID="1"  # 使用现有的配置ID，或者通过API创建一个新的配置
+TEST_FILE="/tmp/large_test_file.tmp"
+FILE_SIZE=$((10 * 1024 * 1024))  # 10MB
+CHUNK_SIZE=$((5 * 1024 * 1024))  # 5MB
+
+# 创建测试文件
+echo "创建测试文件 (${FILE_SIZE} 字节)..."
+dd if=/dev/urandom of=$TEST_FILE bs=1M count=10 2>/dev/null
+
+# 登录获取token
+echo "登录获取Token..."
+LOGIN_RESULT=$(curl -s -X POST "${BASE_URL}/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"username\": \"${USERNAME}\",
+    \"password\": \"${PASSWORD}\"
+  }")
+
+TOKEN=$(echo $LOGIN_RESULT | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+if [ -z "$TOKEN" ]; then
+  echo "登录失败，无法获取token"
+  exit 1
+fi
+echo "获取Token成功"
+
+# 初始化分片上传
+echo "初始化分片上传..."
+INIT_RESULT=$(curl -s -X POST "${BASE_URL}/oss/multipart/init" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"config_id\": \"${CONFIG_ID}\",
+    \"file_name\": \"large_test_file.bin\",
+    \"file_size\": ${FILE_SIZE}
+  }")
+
+echo "初始化结果: $INIT_RESULT"
+
+# 提取上传ID和对象键
+UPLOAD_ID=$(echo $INIT_RESULT | grep -o '"upload_id":"[^"]*"' | cut -d'"' -f4)
+OBJECT_KEY=$(echo $INIT_RESULT | grep -o '"object_key":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$UPLOAD_ID" ] || [ -z "$OBJECT_KEY" ]; then
+  echo "初始化失败，无法获取上传ID或对象键"
+  exit 1
+fi
+
+echo "上传ID: $UPLOAD_ID"
+echo "对象键: $OBJECT_KEY"
+
+# 分割文件并上传各个分片
+echo "分割文件..."
+split -b $CHUNK_SIZE $TEST_FILE ${TEST_FILE}_part_
+
+# 获取分片列表
+PARTS=(${TEST_FILE}_part_*)
+PART_COUNT=${#PARTS[@]}
+echo "文件已分割为 $PART_COUNT 个分片"
+
+# 获取上传URL
+echo "获取分片上传URL..."
+PART_NUMBERS=$(seq -s, 1 $PART_COUNT)
+URL_RESULT=$(curl -s -X GET "${BASE_URL}/oss/multipart/${CONFIG_ID}/urls?upload_id=${UPLOAD_ID}&part_numbers=${PART_NUMBERS}" \
+  -H "Authorization: Bearer $TOKEN")
+
+echo "URL结果: $URL_RESULT"
+
+# 上传分片并收集ETags
+ETAGS=()
+
+echo "上传分片..."
+for i in $(seq 1 $PART_COUNT); do
+  PART_FILE="${TEST_FILE}_part_$(printf '%s' $(echo "a" | tr "a" $(printf "\\$(printf '%o' $(($i+96)))")))"
+  
+  # 获取当前分片的URL (这里需要根据实际返回格式调整提取方式)
+  PART_URL=$(echo $URL_RESULT | jq -r ".data.urls[$((i-1))].url")
+  
+  if [ -z "$PART_URL" ] || [ "$PART_URL" = "null" ]; then
+    echo "无法获取分片 $i 的URL，跳过直接上传"
+    # 如果无法获取预签名URL，可以使用系统可能提供的其他上传方式
+    # 这里仅作示例，实际实现需要根据系统设计调整
+    continue
+  fi
+  
+  echo "上传分片 $i: $PART_FILE"
+  # 使用预签名URL上传分片 (AWS S3格式示例)
+  UPLOAD_RESPONSE=$(curl -s -X PUT -T $PART_FILE "$PART_URL" -H "Content-Type: application/octet-stream" -v 2>&1)
+  
+  # 提取ETag (根据实际返回格式调整)
+  ETAG=$(echo "$UPLOAD_RESPONSE" | grep -i "ETag" | awk '{print $3}' | tr -d '"')
+  
+  if [ -z "$ETAG" ]; then
+    echo "无法获取分片 $i 的ETag，使用模拟值"
+    ETAG="etag_part_$i"  # 模拟值，实际测试中需要真实值
+  fi
+  
+  ETAGS+=("$ETAG")
+  echo "分片 $i ETag: $ETAG"
+done
+
+# 构建分片信息JSON
+PARTS_JSON="["
+for i in $(seq 0 $((${#ETAGS[@]}-1))); do
+  if [ $i -gt 0 ]; then
+    PARTS_JSON+=","
+  fi
+  PARTS_JSON+="\"${ETAGS[$i]}\""
+done
+PARTS_JSON+="]"
+
+# 完成分片上传
+echo "完成分片上传..."
+COMPLETE_RESULT=$(curl -s -X POST "${BASE_URL}/oss/multipart/complete" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"config_id\": \"${CONFIG_ID}\",
+    \"upload_id\": \"${UPLOAD_ID}\",
+    \"object_key\": \"${OBJECT_KEY}\",
+    \"parts\": ${PARTS_JSON}
+  }")
+
+echo "完成结果: $COMPLETE_RESULT"
+
+# 测试取消分片上传
+echo "测试取消分片上传..."
+NEW_INIT_RESULT=$(curl -s -X POST "${BASE_URL}/oss/multipart/init" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"config_id\": \"${CONFIG_ID}\",
+    \"file_name\": \"to_be_aborted.bin\",
+    \"file_size\": ${FILE_SIZE}
+  }")
+
+NEW_UPLOAD_ID=$(echo $NEW_INIT_RESULT | grep -o '"upload_id":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$NEW_UPLOAD_ID" ]; then
+  echo "初始化新上传失败，无法测试取消功能"
+else
+  echo "取消分片上传 (Upload ID: $NEW_UPLOAD_ID)..."
+  ABORT_RESULT=$(curl -s -X DELETE "${BASE_URL}/oss/multipart/abort?config_id=${CONFIG_ID}&upload_id=${NEW_UPLOAD_ID}" \
+    -H "Authorization: Bearer $TOKEN")
+  
+  echo "取消结果: $ABORT_RESULT"
+fi
+
+# 清理临时文件
+echo "清理临时文件..."
+rm -f $TEST_FILE ${TEST_FILE}_part_*
+
+echo "分片上传测试完成"
+```
+
+使用方法：
+```bash
+chmod +x test/shell/multipart_upload_test.sh
+./test/shell/multipart_upload_test.sh
+```
+
+### 10. 前端测试
+
+以下是使用JavaScript在浏览器中测试分片上传的示例代码：
+
+```javascript
+// 分片上传测试函数
+async function testMultipartUpload() {
+  const token = 'your_token_here'; // 从登录响应中获取
+  const configId = '1';
+  const file = document.getElementById('fileInput').files[0];
+  const chunkSize = 5 * 1024 * 1024; // 5MB
+  const chunks = Math.ceil(file.size / chunkSize);
+  
+  // 初始化分片上传
+  const initResponse = await fetch('http://localhost:8080/api/v1/oss/multipart/init', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      config_id: configId,
+      file_name: file.name,
+      file_size: file.size
+    })
+  }).then(res => res.json());
+  
+  console.log('初始化分片上传响应:', initResponse);
+  
+  const uploadId = initResponse.data.upload_id;
+  const objectKey = initResponse.data.object_key;
+  
+  if (!uploadId || !objectKey) {
+    console.error('初始化失败，无法获取上传ID或对象键');
+    return;
+  }
+  
+  // 获取分片上传URL
+  const partNumbers = Array.from({length: chunks}, (_, i) => i + 1).join(',');
+  const urlResponse = await fetch(`http://localhost:8080/api/v1/oss/multipart/${configId}/urls?upload_id=${uploadId}&part_numbers=${partNumbers}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  }).then(res => res.json());
+  
+  console.log('获取分片上传URL响应:', urlResponse);
+  
+  // 上传分片
+  const etags = [];
+  for (let i = 0; i < chunks; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(file.size, start + chunkSize);
+    const chunk = file.slice(start, end);
+    
+    const partUrl = urlResponse.data.urls[i].url;
+    
+    // 上传分片到预签名URL
+    const uploadResponse = await fetch(partUrl, {
+      method: 'PUT',
+      body: chunk,
+      headers: {
+        'Content-Type': 'application/octet-stream'
+      }
+    });
+    
+    const etag = uploadResponse.headers.get('ETag').replace(/"/g, '');
+    etags.push(etag);
+    console.log(`分片 ${i+1} 上传完成, ETag: ${etag}`);
+  }
+  
+  // 完成分片上传
+  const completeResponse = await fetch('http://localhost:8080/api/v1/oss/multipart/complete', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      config_id: configId,
+      upload_id: uploadId,
+      object_key: objectKey,
+      parts: etags
+    })
+  }).then(res => res.json());
+  
+  console.log('完成分片上传响应:', completeResponse);
+  
+  return completeResponse;
+}
+
+// HTML代码示例
+// <input type="file" id="fileInput" />
+// <button onclick="testMultipartUpload()">测试分片上传</button>
+```
+
+### 11. 注意事项
+
+测试分片上传功能时，请注意以下几点：
+
+1. **文件大小**：建议使用较大的文件（如10MB以上）测试分片上传，小文件可能不会触发分片机制
+2. **网络环境**：在不同网络环境下测试，包括稳定网络和不稳定网络
+3. **存储服务兼容性**：针对不同的存储服务（AWS S3、阿里云OSS、Cloudflare R2等）进行测试，它们的分片上传实现可能略有不同
+4. **恢复测试**：测试网络中断后恢复上传的场景
+5. **并发测试**：测试同时进行多个分片上传任务
+6. **大文件测试**：测试超大文件（如1GB以上）的分片上传性能
+7. **文件类型测试**：测试不同类型的文件（如图片、视频、文档等）
+
+### 12. 进阶测试
+
+完成基本测试后，可以进行以下进阶测试：
+
+1. **断点续传**：模拟网络中断，然后使用相同的uploadId继续上传剩余分片
+2. **超时处理**：测试上传超时的情况，验证系统是否能正确处理
+3. **并发上传**：测试多个用户同时进行分片上传
+4. **分片大小优化**：测试不同分片大小对上传速度的影响
+5. **加密文件**：测试上传加密文件的场景
+6. **性能测试**：在高负载条件下测试分片上传功能的性能和稳定性 
