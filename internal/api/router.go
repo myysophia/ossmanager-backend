@@ -26,6 +26,7 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 	ossFileHandler := handlers.NewOSSFileHandler(storageFactory)
 	ossConfigHandler := handlers.NewOSSConfigHandler(storageFactory)
 	md5Handler := handlers.NewMD5Handler(md5Calculator)
+	auditLogHandler := handlers.NewAuditLogHandler() // 审计日志处理器
 
 	// 公开路由
 	public := router.Group("/api/v1")
@@ -70,6 +71,13 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 			configs.GET("", ossConfigHandler.GetConfigList)
 			configs.GET("/:id", ossConfigHandler.GetConfig)
 			configs.PUT("/:id/default", ossConfigHandler.SetDefaultConfig)
+		}
+
+		// 审计日志管理（仅管理员可访问）
+		audit := authorized.Group("/audit")
+		audit.Use(middleware.AdminMiddleware()) // 管理员权限中间件
+		{
+			audit.GET("/logs", auditLogHandler.ListAuditLogs)
 		}
 	}
 
