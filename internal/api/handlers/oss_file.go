@@ -238,27 +238,58 @@ func (h *OSSFileHandler) AbortMultipartUpload(c *gin.Context) {
 	h.Success(c, nil)
 }
 
-// List 获取文件列表
+// List 获取文件列表，相同文件名只获取最新一个
 func (h *OSSFileHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	configID := c.Query("config_id")
 
-	query := db.GetDB().Model(&models.OSSFile{})
+	// 首先，获取去重后的所有文件名
+	var uniqueFileNames []string
+	query := db.GetDB().Model(&models.OSSFile{}).Select("DISTINCT original_filename")
 	if configID != "" {
 		query = query.Where("config_id = ?", configID)
 	}
 
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		h.Error(c, utils.CodeServerError, "获取文件总数失败")
+	if err := query.Pluck("original_filename", &uniqueFileNames).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "获取唯一文件名失败")
 		return
 	}
 
-	var files []models.OSSFile
-	if err := query.Offset((page - 1) * pageSize).Limit(pageSize).Find(&files).Error; err != nil {
-		h.Error(c, utils.CodeServerError, "获取文件列表失败")
+	total := int64(len(uniqueFileNames))
+
+	// 对于分页的处理
+	startIdx := (page - 1) * pageSize
+	endIdx := startIdx + pageSize
+	if startIdx >= len(uniqueFileNames) {
+		h.Success(c, gin.H{
+			"total": total,
+			"items": []models.OSSFile{},
+		})
 		return
+	}
+	if endIdx > len(uniqueFileNames) {
+		endIdx = len(uniqueFileNames)
+	}
+
+	// 获取当前页的文件名
+	pageFileNames := uniqueFileNames[startIdx:endIdx]
+
+	// 对于每个文件名，获取最新的记录
+	var files []models.OSSFile
+	for _, fileName := range pageFileNames {
+		var latest models.OSSFile
+		subQuery := db.GetDB().Model(&models.OSSFile{}).Where("original_filename = ?", fileName)
+		if configID != "" {
+			subQuery = subQuery.Where("config_id = ?", configID)
+		}
+
+		if err := subQuery.Order("created_at DESC").First(&latest).Error; err != nil {
+			// 如果查询出错，跳过这个文件名
+			continue
+		}
+
+		files = append(files, latest)
 	}
 
 	h.Success(c, gin.H{
