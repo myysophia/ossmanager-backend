@@ -33,7 +33,8 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	}
 
 	// 获取存储配置
-	configID := c.PostForm("config_id")
+	// configID := c.PostForm("config_id")
+	configID := "2"
 	if configID == "" {
 		h.Error(c, utils.CodeInvalidParams, "存储配置ID不能为空")
 		return
