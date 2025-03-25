@@ -66,12 +66,12 @@ type StorageService interface {
 	// objectKey: 对象键
 	// 返回：对象大小, 错误
 	GetObjectInfo(objectKey string) (int64, error)
-	
+
 	// GetObject 获取对象内容
 	// objectKey: 对象键
 	// 返回：对象内容读取器, 错误
 	GetObject(objectKey string) (io.ReadCloser, error)
-	
+
 	// TriggerMD5Calculation 触发计算MD5值
 	// objectKey: 对象键
 	// fileID: 文件ID
@@ -87,7 +87,7 @@ type StorageFactory interface {
 
 	// GetDefaultStorageService 获取默认存储服务
 	GetDefaultStorageService() (StorageService, error)
-	
+
 	// ClearCache 清除缓存
 	ClearCache()
-} 
+}
