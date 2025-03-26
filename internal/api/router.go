@@ -26,7 +26,10 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 	ossFileHandler := handlers.NewOSSFileHandler(storageFactory)
 	ossConfigHandler := handlers.NewOSSConfigHandler(storageFactory)
 	md5Handler := handlers.NewMD5Handler(md5Calculator)
-	auditLogHandler := handlers.NewAuditLogHandler() // 审计日志处理器
+	auditLogHandler := handlers.NewAuditLogHandler()     // 审计日志处理器
+	userHandler := handlers.NewUserHandler()             // 用户管理处理器
+	roleHandler := handlers.NewRoleHandler()             // 角色管理处理器
+	permissionHandler := handlers.NewPermissionHandler() // 权限管理处理器
 
 	// 公开路由
 	public := router.Group("/api/v1")
@@ -45,6 +48,36 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 	{
 		// 用户相关
 		authorized.GET("/user/current", authHandler.GetCurrentUser)
+
+		// 用户管理
+		users := authorized.Group("/users")
+		{
+			users.GET("", userHandler.List)
+			users.POST("", userHandler.Create)
+			users.GET("/:id", userHandler.Get)
+			users.PUT("/:id", userHandler.Update)
+			users.DELETE("/:id", userHandler.Delete)
+		}
+
+		// 角色管理
+		roles := authorized.Group("/roles")
+		{
+			roles.GET("", roleHandler.List)
+			roles.POST("", roleHandler.Create)
+			roles.GET("/:id", roleHandler.Get)
+			roles.PUT("/:id", roleHandler.Update)
+			roles.DELETE("/:id", roleHandler.Delete)
+		}
+
+		// 权限管理
+		permissions := authorized.Group("/permissions")
+		{
+			permissions.GET("", permissionHandler.List)
+			permissions.POST("", permissionHandler.Create)
+			permissions.GET("/:id", permissionHandler.Get)
+			permissions.PUT("/:id", permissionHandler.Update)
+			permissions.DELETE("/:id", permissionHandler.Delete)
+		}
 
 		// OSS文件管理
 		authorized.POST("/oss/files", ossFileHandler.Upload)
