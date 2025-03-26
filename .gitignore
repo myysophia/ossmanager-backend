@@ -6,7 +6,6 @@
 .pytest_cache/
 configs/
 logs
-test
 cmd/__debug_bin*
 *.log
 
