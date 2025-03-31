@@ -255,7 +255,6 @@ func (h *OSSFileHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	configID := c.Query("config_id")
-
 	// 首先，获取去重后的所有文件名
 	var uniqueFileNames []string
 	query := db.GetDB().Model(&models.OSSFile{}).Select("DISTINCT original_filename")
@@ -462,4 +461,40 @@ func (h *OSSFileHandler) updateMD5Status(fileID uint, status string, md5 string)
 	if err := db.GetDB().Model(&models.OSSFile{}).Where("id = ?", fileID).Updates(fileUpdate).Error; err != nil {
 		logger.Error("更新文件MD5状态失败", zap.Uint("file_id", fileID), zap.Error(err))
 	}
+}
+
+// GetByOriginalFilename 根据原始文件名获取文件详情
+func (h *OSSFileHandler) GetByOriginalFilename(c *gin.Context) {
+	filename := c.Query("filename")
+	if filename == "" {
+		h.Error(c, utils.CodeInvalidParams, "文件名不能为空")
+		return
+	}
+
+	var ossFile models.OSSFile
+	if err := db.GetDB().Where("original_filename = ? AND status = ?", filename, "ACTIVE").First(&ossFile).Error; err != nil {
+		h.Error(c, utils.CodeNotFound, "文件不存在")
+		return
+	}
+
+	storage, err := h.storageFactory.GetStorageService(ossFile.StorageType)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
+		return
+	}
+
+	downloadURL, expires, err := storage.GenerateDownloadURL(ossFile.ObjectKey, 24*time.Hour)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "生成下载链接失败")
+		return
+	}
+
+	// 更新下载URL和过期时间
+	ossFile.DownloadURL = downloadURL
+	ossFile.ExpiresAt = expires
+	if err := db.GetDB().Save(&ossFile).Error; err != nil {
+		logger.Error("更新文件下载URL失败", zap.Error(err))
+	}
+
+	h.Success(c, ossFile)
 }

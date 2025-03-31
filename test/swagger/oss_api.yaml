@@ -56,16 +56,16 @@ paths:
             type: object
             required:
               - username
-              - password
+              - passwd
               - email
               - real_name
             properties:
               username:
                 type: string
                 example: testuser
-              password:
+              passwd:
                 type: string
-                example: Password123!
+                example: passwd123!
               email:
                 type: string
                 example: test@example.com
@@ -101,14 +101,14 @@ paths:
             type: object
             required:
               - username
-              - password
+              - passwd
             properties:
               username:
                 type: string
                 example: testuser
-              password:
+              passwd:
                 type: string
-                example: Password123!
+                example: passwd123!
       responses:
         200:
           description: 登录成功
@@ -432,6 +432,48 @@ paths:
                     description: 计算状态
                     enum: [pending, processing, completed, failed]
                     example: completed
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        404:
+          description: 文件不存在
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+
+  /oss/files/by-filename:
+    get:
+      tags:
+        - oss-files
+      summary: 根据原始文件名获取文件信息
+      operationId: getFileByOriginalFilename
+      security:
+        - Bearer: []
+      parameters:
+        - in: query
+          name: filename
+          type: string
+          required: true
+          description: 原始文件名
+          example: example.txt
+      responses:
+        200:
+          description: 成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 成功
+              data:
+                $ref: '#/definitions/OSSFile'
         401:
           description: 未授权
           schema:
@@ -1116,15 +1158,15 @@ paths:
             type: object
             required:
               - username
-              - password
+              - passwd
               - email
             properties:
               username:
                 type: string
                 example: testuser
-              password:
+              passwd:
                 type: string
-                example: Password123!
+                example: passwd123!
               email:
                 type: string
                 example: test@example.com
@@ -1922,7 +1964,7 @@ definitions:
       access_key:
         type: string
         example: AKIAIOSFODNN7EXAMPLE
-      secret_key:
+      sec_key:
         type: string
         example: "********"
       region:
@@ -1968,7 +2010,7 @@ definitions:
       access_key:
         type: string
         example: AKIAIOSFODNN7EXAMPLE
-      secret_key:
+      sec_key:
         type: string
         example: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
       region:
