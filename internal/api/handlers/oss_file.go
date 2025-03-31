@@ -77,6 +77,13 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 		return
 	}
 
+	// 从配置中获取过期时间，如果未配置则默认为24小时
+	expireTime := config.URLExpireTime
+	if expireTime <= 0 {
+		expireTime = 24 * 3600 // 默认24小时
+	}
+	expiresAt := time.Now().Add(time.Duration(expireTime) * time.Second)
+
 	// 保存文件记录
 	ossFile := models.OSSFile{
 		ConfigID:         config.ID,
@@ -89,6 +96,7 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 		DownloadURL:      uploadURL,
 		UploaderID:       utils.GetUserID(c),
 		UploadIP:         c.ClientIP(),
+		ExpiresAt:        expiresAt,
 		Status:           "ACTIVE",
 	}
 
