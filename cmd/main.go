@@ -53,7 +53,7 @@ func main() {
 	logger.Info("MD5计算器初始化成功", zap.Int("workers", cfg.App.Workers))
 
 	// 设置路由
-	router := api.SetupRouter(storageFactory, md5Calculator)
+	router := api.SetupRouter(storageFactory, md5Calculator, db.GetDB())
 
 	// 创建HTTP服务器
 	server := &http.Server{

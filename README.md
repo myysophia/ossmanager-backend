@@ -131,3 +131,49 @@ psql -U postgres -d ossmanager -f pkg/db/migrations/001_init_schema.sql
 ## 许可证
 
 [MIT License](LICENSE)
+
+## 区域存储桶映射
+
+系统支持配置不同区域的存储桶映射关系，方便管理和访问不同区域的存储资源。
+
+### 功能特点
+
+- 支持配置区域与存储桶的映射关系
+- 提供完整的CRUD接口
+- 支持按区域和存储桶名称筛选
+- 支持添加描述信息
+
+### API接口
+
+- GET /oss/region-buckets - 获取区域存储桶映射列表
+- POST /oss/region-buckets - 创建区域存储桶映射
+- GET /oss/region-buckets/{id} - 获取区域存储桶映射详情
+- PUT /oss/region-buckets/{id} - 更新区域存储桶映射
+- DELETE /oss/region-buckets/{id} - 删除区域存储桶映射
+
+## 角色存储桶访问权限
+
+系统实现了基于角色的存储桶访问控制，可以精确控制不同角色对存储桶的访问权限。
+
+### 功能特点
+
+- 支持为不同角色配置存储桶访问权限
+- 支持细粒度的权限控制（读、写、删除）
+- 提供完整的CRUD接口
+- 支持按角色ID和存储桶名称筛选
+
+### API接口
+
+- GET /oss/role-bucket-access - 获取角色存储桶访问权限列表
+- POST /oss/role-bucket-access - 创建角色存储桶访问权限
+- GET /oss/role-bucket-access/{id} - 获取角色存储桶访问权限详情
+- PUT /oss/role-bucket-access/{id} - 更新角色存储桶访问权限
+- DELETE /oss/role-bucket-access/{id} - 删除角色存储桶访问权限
+
+### 权限说明
+
+系统支持以下存储桶访问权限：
+
+- READ: 读取权限，允许查看和下载存储桶中的文件
+- WRITE: 写入权限，允许上传和修改存储桶中的文件
+- DELETE: 删除权限，允许删除存储桶中的文件

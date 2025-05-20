@@ -3,6 +3,7 @@ module github.com/myysophia/ossmanager-backend
 go 1.24.1
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
 	github.com/aliyun/fc-go-sdk v0.0.0-20230313060359-3a1b2ede1e1e
 	github.com/aws/aws-sdk-go-v2 v1.36.3

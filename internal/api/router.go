@@ -6,10 +6,11 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/api/middleware"
 	"github.com/myysophia/ossmanager-backend/internal/function"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
+	"gorm.io/gorm"
 )
 
 // SetupRouter 设置路由
-func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5Calculator) *gin.Engine {
+func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5Calculator, db *gorm.DB) *gin.Engine {
 	// 创建Gin实例
 	router := gin.New()
 
@@ -23,13 +24,14 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 
 	// 创建处理器
 	authHandler := handlers.NewAuthHandler()
-	ossFileHandler := handlers.NewOSSFileHandler(storageFactory)
+	ossFileHandler := handlers.NewOSSFileHandler(storageFactory, db)
 	ossConfigHandler := handlers.NewOSSConfigHandler(storageFactory)
 	md5Handler := handlers.NewMD5Handler(md5Calculator)
-	auditLogHandler := handlers.NewAuditLogHandler()     // 审计日志处理器
-	userHandler := handlers.NewUserHandler()             // 用户管理处理器
-	roleHandler := handlers.NewRoleHandler()             // 角色管理处理器
-	permissionHandler := handlers.NewPermissionHandler() // 权限管理处理器
+	auditLogHandler := handlers.NewAuditLogHandler()           // 审计日志处理器
+	userHandler := handlers.NewUserHandler()                   // 用户管理处理器
+	roleHandler := handlers.NewRoleHandler(db)                 // 角色管理处理器
+	permissionHandler := handlers.NewPermissionHandler()       // 权限管理处理器
+	regionBucketHandler := handlers.NewRegionBucketHandler(db) // 区域存储桶处理器
 
 	// 公开路由
 	public := router.Group("/api/v1")
@@ -112,6 +114,29 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 		audit.Use(middleware.AdminMiddleware()) // 管理员权限中间件
 		{
 			audit.GET("/logs", auditLogHandler.ListAuditLogs)
+		}
+
+		// 区域存储桶管理
+		regionBuckets := authorized.Group("/oss/region-buckets")
+		{
+			regionBuckets.GET("", regionBucketHandler.List)
+			regionBuckets.POST("", regionBucketHandler.Create)
+			regionBuckets.GET("/:id", regionBucketHandler.Get)
+			regionBuckets.PUT("/:id", regionBucketHandler.Update)
+			regionBuckets.DELETE("/:id", regionBucketHandler.Delete)
+			regionBuckets.GET("/regions", regionBucketHandler.GetRegionList)
+			regionBuckets.GET("/buckets", regionBucketHandler.GetBucketList)
+			regionBuckets.GET("/user-accessible", regionBucketHandler.GetUserAccessibleBuckets)
+		}
+
+		// 角色存储桶访问权限管理
+		roleBucketAccess := authorized.Group("/oss/role-bucket-access")
+		{
+			roleBucketAccess.GET("", roleHandler.ListRoleBucketAccess)
+			roleBucketAccess.POST("", roleHandler.CreateRoleBucketAccess)
+			roleBucketAccess.GET("/:id", roleHandler.GetRoleBucketAccess)
+			roleBucketAccess.PUT("/:id", roleHandler.UpdateRoleBucketAccess)
+			roleBucketAccess.DELETE("/:id", roleHandler.DeleteRoleBucketAccess)
 		}
 	}
 

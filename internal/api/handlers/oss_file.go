@@ -9,46 +9,52 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/myysophia/ossmanager-backend/internal/auth"
+
 	"github.com/gin-gonic/gin"
-	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 type OSSFileHandler struct {
 	*BaseHandler
 	storageFactory oss.StorageFactory
+	DB             *gorm.DB
 }
 
-func NewOSSFileHandler(storageFactory oss.StorageFactory) *OSSFileHandler {
+func NewOSSFileHandler(storageFactory oss.StorageFactory, db *gorm.DB) *OSSFileHandler {
 	return &OSSFileHandler{
 		BaseHandler:    NewBaseHandler(),
 		storageFactory: storageFactory,
+		DB:             db,
 	}
 }
 
 // Upload 上传文件
 func (h *OSSFileHandler) Upload(c *gin.Context) {
+	// 获取用户ID
+	userID := c.GetUint("user_id")
+
+	// 获取存储配置
+	var config models.OSSConfig
+	if err := h.DB.Where("is_default = ?", true).First(&config).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "获取默认存储配置失败")
+		return
+	}
+
+	// 检查用户是否有权限访问该桶
+	if !auth.CheckBucketAccess(h.DB, userID, config.Region, config.Bucket) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
+		return
+	}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		h.Error(c, utils.CodeInvalidParams, "获取文件失败")
-		return
-	}
-
-	// 获取存储配置
-	// configID := c.PostForm("config_id")
-	configID := "2"
-	if configID == "" {
-		h.Error(c, utils.CodeInvalidParams, "存储配置ID不能为空")
-		return
-	}
-
-	var config models.OSSConfig
-	if err := db.GetDB().First(&config, configID).Error; err != nil {
-		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
 		return
 	}
 
@@ -100,7 +106,7 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 		Status:           "ACTIVE",
 	}
 
-	if err := db.GetDB().Create(&ossFile).Error; err != nil {
+	if err := h.DB.Create(&ossFile).Error; err != nil {
 		h.Error(c, utils.CodeServerError, "保存文件记录失败")
 		return
 	}
@@ -124,8 +130,14 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 	}
 
 	var config models.OSSConfig
-	if err := db.GetDB().First(&config, req.ConfigID).Error; err != nil {
+	if err := h.DB.First(&config, req.ConfigID).Error; err != nil {
 		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
+		return
+	}
+
+	// 检查用户是否有权限访问该桶
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, config.Bucket) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
 
@@ -166,8 +178,14 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 	}
 
 	var config models.OSSConfig
-	if err := db.GetDB().First(&config, req.ConfigID).Error; err != nil {
+	if err := h.DB.First(&config, req.ConfigID).Error; err != nil {
 		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
+		return
+	}
+
+	// 检查用户是否有权限访问该桶
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, config.Bucket) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
 
@@ -214,7 +232,7 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 		Status:           "ACTIVE",
 	}
 
-	if err := db.GetDB().Create(&ossFile).Error; err != nil {
+	if err := h.DB.Create(&ossFile).Error; err != nil {
 		h.Error(c, utils.CodeServerError, "保存文件记录失败")
 		return
 	}
@@ -239,8 +257,14 @@ func (h *OSSFileHandler) AbortMultipartUpload(c *gin.Context) {
 	}
 
 	var config models.OSSConfig
-	if err := db.GetDB().First(&config, req.ConfigID).Error; err != nil {
+	if err := h.DB.First(&config, req.ConfigID).Error; err != nil {
 		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
+		return
+	}
+
+	// 检查用户是否有权限访问该桶
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, config.Bucket) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
 
@@ -260,12 +284,22 @@ func (h *OSSFileHandler) AbortMultipartUpload(c *gin.Context) {
 
 // List 获取文件列表，相同文件名只获取最新一个
 func (h *OSSFileHandler) List(c *gin.Context) {
+	// 获取用户ID
+	userID := c.GetUint("user_id")
+
+	// 获取用户可访问的桶列表
+	buckets, err := auth.GetUserAccessibleBuckets(h.DB, userID, "")
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "获取可访问桶列表失败")
+		return
+	}
+
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	configID := c.Query("config_id")
 	// 首先，获取去重后的所有文件名
 	var uniqueFileNames []string
-	query := db.GetDB().Model(&models.OSSFile{}).Select("DISTINCT original_filename")
+	query := h.DB.Model(&models.OSSFile{}).Select("DISTINCT original_filename").Where("bucket IN ?", buckets)
 	if configID != "" {
 		query = query.Where("config_id = ?", configID)
 	}
@@ -298,7 +332,7 @@ func (h *OSSFileHandler) List(c *gin.Context) {
 	var files []models.OSSFile
 	for _, fileName := range pageFileNames {
 		var latest models.OSSFile
-		subQuery := db.GetDB().Model(&models.OSSFile{}).Where("original_filename = ?", fileName)
+		subQuery := h.DB.Model(&models.OSSFile{}).Where("original_filename = ? AND bucket IN ?", fileName, buckets)
 		if configID != "" {
 			subQuery = subQuery.Where("config_id = ?", configID)
 		}
@@ -319,17 +353,26 @@ func (h *OSSFileHandler) List(c *gin.Context) {
 
 // Delete 删除文件
 func (h *OSSFileHandler) Delete(c *gin.Context) {
-	fileID := c.Param("id")
+	// 获取用户ID
+	userID := c.GetUint("user_id")
 
+	// 获取文件信息
 	var file models.OSSFile
-	if err := db.GetDB().First(&file, fileID).Error; err != nil {
+	if err := h.DB.First(&file, c.Param("id")).Error; err != nil {
 		h.Error(c, utils.CodeFileNotFound, "文件不存在")
 		return
 	}
 
+	// 获取配置信息以获取Region
 	var config models.OSSConfig
-	if err := db.GetDB().First(&config, file.ConfigID).Error; err != nil {
+	if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
 		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
+		return
+	}
+
+	// 检查用户是否有权限访问该桶
+	if !auth.CheckBucketAccess(h.DB, userID, config.Region, file.Bucket) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
 
@@ -344,7 +387,7 @@ func (h *OSSFileHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := db.GetDB().Delete(&file).Error; err != nil {
+	if err := h.DB.Delete(&file).Error; err != nil {
 		h.Error(c, utils.CodeServerError, "删除文件记录失败")
 		return
 	}
@@ -357,14 +400,21 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 	fileID := c.Param("id")
 
 	var file models.OSSFile
-	if err := db.GetDB().First(&file, fileID).Error; err != nil {
+	if err := h.DB.First(&file, fileID).Error; err != nil {
 		h.Error(c, utils.CodeFileNotFound, "文件不存在")
 		return
 	}
 
+	// 获取配置信息以获取Region
 	var config models.OSSConfig
-	if err := db.GetDB().First(&config, file.ConfigID).Error; err != nil {
+	if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
 		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
+		return
+	}
+
+	// 检查用户是否有权限访问该桶
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, file.Bucket) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
 
@@ -390,8 +440,24 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 func (h *OSSFileHandler) triggerMD5Calculation(fileID uint) {
 	// 获取文件信息
 	var file models.OSSFile
-	if err := db.GetDB().First(&file, fileID).Error; err != nil {
+	if err := h.DB.First(&file, fileID).Error; err != nil {
 		logger.Error("获取文件信息失败", zap.Uint("file_id", fileID), zap.Error(err))
+		return
+	}
+
+	// 获取配置信息以获取Region
+	var config models.OSSConfig
+	if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
+		logger.Error("获取存储配置失败", zap.Uint("config_id", file.ConfigID), zap.Error(err))
+		return
+	}
+
+	// 检查用户是否有权限访问该桶
+	if !auth.CheckBucketAccess(h.DB, file.UploaderID, config.Region, file.Bucket) {
+		logger.Error("没有权限访问该存储桶",
+			zap.Uint("user_id", file.UploaderID),
+			zap.String("region", config.Region),
+			zap.String("bucket", file.Bucket))
 		return
 	}
 
@@ -409,7 +475,7 @@ func (h *OSSFileHandler) triggerMD5Calculation(fileID uint) {
 	fileUpdate := models.OSSFile{
 		MD5Status: models.MD5StatusCalculating,
 	}
-	if err := db.GetDB().Model(&models.OSSFile{}).Where("id = ?", fileID).Updates(fileUpdate).Error; err != nil {
+	if err := h.DB.Model(&models.OSSFile{}).Where("id = ?", fileID).Updates(fileUpdate).Error; err != nil {
 		logger.Error("更新文件MD5状态失败", zap.Uint("file_id", fileID), zap.Error(err))
 		return
 	}
@@ -418,7 +484,7 @@ func (h *OSSFileHandler) triggerMD5Calculation(fileID uint) {
 	go func() {
 		// 查询文件存储配置
 		var config models.OSSConfig
-		if err := db.GetDB().First(&config, file.ConfigID).Error; err != nil {
+		if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
 			logger.Error("获取存储配置失败", zap.Uint("config_id", file.ConfigID), zap.Error(err))
 			h.updateMD5Status(fileID, models.MD5StatusFailed, "")
 			return
@@ -466,7 +532,7 @@ func (h *OSSFileHandler) updateMD5Status(fileID uint, status string, md5 string)
 		MD5Status: status,
 		MD5:       md5,
 	}
-	if err := db.GetDB().Model(&models.OSSFile{}).Where("id = ?", fileID).Updates(fileUpdate).Error; err != nil {
+	if err := h.DB.Model(&models.OSSFile{}).Where("id = ?", fileID).Updates(fileUpdate).Error; err != nil {
 		logger.Error("更新文件MD5状态失败", zap.Uint("file_id", fileID), zap.Error(err))
 	}
 }
@@ -480,8 +546,21 @@ func (h *OSSFileHandler) GetByOriginalFilename(c *gin.Context) {
 	}
 
 	var ossFile models.OSSFile
-	if err := db.GetDB().Where("original_filename = ? AND status = ?", filename, "ACTIVE").First(&ossFile).Error; err != nil {
+	if err := h.DB.Where("original_filename = ? AND status = ?", filename, "ACTIVE").First(&ossFile).Error; err != nil {
 		h.Error(c, utils.CodeNotFound, "文件不存在")
+		return
+	}
+
+	// 获取配置信息以获取Region
+	var config models.OSSConfig
+	if err := h.DB.First(&config, ossFile.ConfigID).Error; err != nil {
+		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
+		return
+	}
+
+	// 检查用户是否有权限访问该桶
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, ossFile.Bucket) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
 
@@ -500,7 +579,7 @@ func (h *OSSFileHandler) GetByOriginalFilename(c *gin.Context) {
 	// 更新下载URL和过期时间
 	ossFile.DownloadURL = downloadURL
 	ossFile.ExpiresAt = expires
-	if err := db.GetDB().Save(&ossFile).Error; err != nil {
+	if err := h.DB.Save(&ossFile).Error; err != nil {
 		logger.Error("更新文件下载URL失败", zap.Error(err))
 	}
 
