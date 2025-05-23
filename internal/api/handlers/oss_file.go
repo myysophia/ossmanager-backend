@@ -37,7 +37,7 @@ func NewOSSFileHandler(storageFactory oss.StorageFactory, db *gorm.DB) *OSSFileH
 // Upload 上传文件
 func (h *OSSFileHandler) Upload(c *gin.Context) {
 	// 获取用户ID
-	userID := c.GetUint("user_id")
+	userID := c.GetUint("userID")
 
 	// 获取存储配置
 	var config models.OSSConfig
@@ -136,7 +136,7 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, config.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, config.Bucket) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -184,7 +184,7 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, config.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, config.Bucket) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -263,7 +263,7 @@ func (h *OSSFileHandler) AbortMultipartUpload(c *gin.Context) {
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, config.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, config.Bucket) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -285,7 +285,7 @@ func (h *OSSFileHandler) AbortMultipartUpload(c *gin.Context) {
 // List 获取文件列表，相同文件名只获取最新一个
 func (h *OSSFileHandler) List(c *gin.Context) {
 	// 获取用户ID
-	userID := c.GetUint("user_id")
+	userID := c.GetUint("userID")
 
 	// 获取用户可访问的桶列表
 	buckets, err := auth.GetUserAccessibleBuckets(h.DB, userID, "")
@@ -354,7 +354,7 @@ func (h *OSSFileHandler) List(c *gin.Context) {
 // Delete 删除文件
 func (h *OSSFileHandler) Delete(c *gin.Context) {
 	// 获取用户ID
-	userID := c.GetUint("user_id")
+	userID := c.GetUint("userID")
 
 	// 获取文件信息
 	var file models.OSSFile
@@ -413,7 +413,7 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, file.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, file.Bucket) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -559,7 +559,7 @@ func (h *OSSFileHandler) GetByOriginalFilename(c *gin.Context) {
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("user_id"), config.Region, ossFile.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, ossFile.Bucket) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
