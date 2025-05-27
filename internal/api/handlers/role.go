@@ -21,7 +21,7 @@ type RoleHandler struct {
 func NewRoleHandler(db *gorm.DB) *RoleHandler {
 	return &RoleHandler{
 		BaseHandler: BaseHandler{},
-		DB:          db,
+		DB:          db.Debug(),
 	}
 }
 
@@ -49,7 +49,12 @@ func (h *RoleHandler) List(c *gin.Context) {
 
 	// 获取角色列表
 	var roles []models.Role
-	if err := query.Preload("Permissions").Offset((page - 1) * pageSize).Limit(pageSize).Find(&roles).Error; err != nil {
+	if err := query.Preload("Permissions").
+		Preload("Users").
+		Preload("RegionBuckets").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&roles).Error; err != nil {
 		logger.Error("获取角色列表失败", zap.Error(err))
 		h.InternalError(c, "获取角色列表失败")
 		return
