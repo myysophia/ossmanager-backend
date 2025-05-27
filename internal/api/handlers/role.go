@@ -60,10 +60,19 @@ func (h *RoleHandler) List(c *gin.Context) {
 		return
 	}
 
-	h.Success(c, gin.H{
-		"total": total,
-		"items": roles,
-	})
+	// 构建返回数据
+	response := gin.H{
+		"code": 0,
+		"msg":  "success",
+		"data": gin.H{
+			"total": total,
+			"page":  page,
+			"limit": pageSize,
+			"items": roles,
+		},
+	}
+
+	h.Success(c, response)
 }
 
 // Create 创建角色
