@@ -1,10 +1,6 @@
 package handlers
 
 import (
-	"crypto/md5"
-	"encoding/hex"
-	"fmt"
-	"io"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -462,68 +458,68 @@ func (h *OSSFileHandler) triggerMD5Calculation(fileID uint) {
 	}
 
 	// 构建请求URL - 使用HTTP方式触发
-	url := fmt.Sprintf("/api/v1/oss/files/%d/md5", fileID)
-	logger.Info("准备触发MD5计算", zap.String("url", url), zap.Uint("file_id", fileID))
-
-	// 直接调用模型方法计算MD5
-	if file.MD5 != "" {
-		logger.Info("文件已有MD5值，无需计算", zap.Uint("file_id", fileID), zap.String("md5", file.MD5))
-		return
-	}
-
-	// 更新文件状态为计算中
-	fileUpdate := models.OSSFile{
-		MD5Status: models.MD5StatusCalculating,
-	}
-	if err := h.DB.Model(&models.OSSFile{}).Where("id = ?", fileID).Updates(fileUpdate).Error; err != nil {
-		logger.Error("更新文件MD5状态失败", zap.Uint("file_id", fileID), zap.Error(err))
-		return
-	}
-
-	// 启动一个新的goroutine来计算MD5
-	go func() {
-		// 查询文件存储配置
-		var config models.OSSConfig
-		if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
-			logger.Error("获取存储配置失败", zap.Uint("config_id", file.ConfigID), zap.Error(err))
-			h.updateMD5Status(fileID, models.MD5StatusFailed, "")
-			return
-		}
-
-		// 使用handler中的storageFactory
-		storage, err := h.storageFactory.GetStorageService(file.StorageType)
-		if err != nil {
-			logger.Error("获取存储服务失败", zap.String("storage_type", file.StorageType), zap.Error(err))
-			h.updateMD5Status(fileID, models.MD5StatusFailed, "")
-			return
-		}
-
-		// 下载文件并计算MD5
-		reader, err := storage.GetObject(file.ObjectKey)
-		if err != nil {
-			logger.Error("下载文件失败", zap.String("object_key", file.ObjectKey), zap.Error(err))
-			h.updateMD5Status(fileID, models.MD5StatusFailed, "")
-			return
-		}
-		defer reader.Close()
-
-		// 计算MD5
-		hash := md5.New()
-		if _, err := io.Copy(hash, reader); err != nil {
-			logger.Error("计算MD5失败", zap.String("object_key", file.ObjectKey), zap.Error(err))
-			h.updateMD5Status(fileID, models.MD5StatusFailed, "")
-			return
-		}
-
-		// 转换为十六进制字符串
-		md5Str := hex.EncodeToString(hash.Sum(nil))
-		logger.Info("文件MD5计算完成", zap.Uint("file_id", fileID), zap.String("md5", md5Str))
-
-		// 更新MD5
-		h.updateMD5Status(fileID, models.MD5StatusCompleted, md5Str)
-	}()
-
-	logger.Info("已触发文件MD5计算", zap.Uint("file_id", fileID))
+	//url := fmt.Sprintf("/api/v1/oss/files/%d/md5", fileID)
+	//logger.Info("准备触发MD5计算", zap.String("url", url), zap.Uint("file_id", fileID))
+	//
+	//// 直接调用模型方法计算MD5
+	//if file.MD5 != "" {
+	//	logger.Info("文件已有MD5值，无需计算", zap.Uint("file_id", fileID), zap.String("md5", file.MD5))
+	//	return
+	//}
+	//
+	//// 更新文件状态为计算中
+	//fileUpdate := models.OSSFile{
+	//	MD5Status: models.MD5StatusCalculating,
+	//}
+	//if err := h.DB.Model(&models.OSSFile{}).Where("id = ?", fileID).Updates(fileUpdate).Error; err != nil {
+	//	logger.Error("更新文件MD5状态失败", zap.Uint("file_id", fileID), zap.Error(err))
+	//	return
+	//}
+	//
+	//// 启动一个新的goroutine来计算MD5
+	//go func() {
+	//	// 查询文件存储配置
+	//	var config models.OSSConfig
+	//	if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
+	//		logger.Error("获取存储配置失败", zap.Uint("config_id", file.ConfigID), zap.Error(err))
+	//		h.updateMD5Status(fileID, models.MD5StatusFailed, "")
+	//		return
+	//	}
+	//
+	//	// 使用handler中的storageFactory
+	//	storage, err := h.storageFactory.GetStorageService(file.StorageType)
+	//	if err != nil {
+	//		logger.Error("获取存储服务失败", zap.String("storage_type", file.StorageType), zap.Error(err))
+	//		h.updateMD5Status(fileID, models.MD5StatusFailed, "")
+	//		return
+	//	}
+	//
+	//	// 下载文件并计算MD5
+	//	reader, err := storage.GetObject(file.ObjectKey)
+	//	if err != nil {
+	//		logger.Error("下载文件失败", zap.String("object_key", file.ObjectKey), zap.Error(err))
+	//		h.updateMD5Status(fileID, models.MD5StatusFailed, "")
+	//		return
+	//	}
+	//	defer reader.Close()
+	//
+	//	// 计算MD5
+	//	hash := md5.New()
+	//	if _, err := io.Copy(hash, reader); err != nil {
+	//		logger.Error("计算MD5失败", zap.String("object_key", file.ObjectKey), zap.Error(err))
+	//		h.updateMD5Status(fileID, models.MD5StatusFailed, "")
+	//		return
+	//	}
+	//
+	//	// 转换为十六进制字符串
+	//	md5Str := hex.EncodeToString(hash.Sum(nil))
+	//	logger.Info("文件MD5计算完成", zap.Uint("file_id", fileID), zap.String("md5", md5Str))
+	//
+	//	// 更新MD5
+	//	h.updateMD5Status(fileID, models.MD5StatusCompleted, md5Str)
+	//}()
+	//
+	//logger.Info("已触发文件MD5计算", zap.Uint("file_id", fileID))
 }
 
 // updateMD5Status 更新文件MD5状态
