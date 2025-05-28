@@ -1,0 +1,165 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+## 4. API 设计
+
+### 4.1 通用返回格式
+
+所有 API 响应都遵循以下统一格式：
+
+```json
+{
+    "code": 0,           // 状态码：0 表示成功，非 0 表示错误
+    "msg": "success",    // 状态消息
+    "data": {            // 实际数据
+        // 具体的数据结构
+    }
+}
+```
+
+#### 4.1.1 分页列表返回格式
+
+对于分页列表接口，data 字段的格式如下：
+
+```json
+{
+    "code": 0,
+    "msg": "success",
+    "data": {
+        "total": 100,    // 总记录数
+        "page": 1,       // 当前页码
+        "limit": 10,     // 每页记录数
+        "items": [       // 数据列表
+            // 具体的数据项
+        ]
+    }
+}
+```
+
+#### 4.1.2 错误返回格式
+
+当发生错误时，返回格式如下：
+
+```json
+{
+    "code": 1001,        // 错误码
+    "msg": "错误信息",    // 错误描述
+    "data": null         // 错误时 data 为 null
+}
+```
+
+### 4.2 认证相关 API
+
+```
+POST /api/auth/login
+  - 请求: { username, password }
+  - 响应: { token, user }
+
+GET /api/auth/me
+  - 请求: Authorization: Bearer {token}
+  - 响应: { user }
+
+POST /api/auth/logout
+  - 请求: Authorization: Bearer {token}
+  - 响应: { message }
+```
+
+### 4.3 用户与权限管理 API
+
+```
+# 用户管理
+GET /api/users
+POST /api/users
+GET /api/users/:id
+PUT /api/users/:id
+DELETE /api/users/:id
+
+# 角色管理
+GET /api/roles
+POST /api/roles
+GET /api/roles/:id
+PUT /api/roles/:id
+DELETE /api/roles/:id
+
+# 权限管理
+GET /api/permissions
+POST /api/permissions
+GET /api/permissions/:id
+PUT /api/permissions/:id
+DELETE /api/permissions/:id
+
+# 用户角色关联
+POST /api/users/:id/roles
+DELETE /api/users/:id/roles/:roleId
+
+# 角色权限关联
+POST /api/roles/:id/permissions
+DELETE /api/roles/:id/permissions/:permissionId
+```
+
+### 4.4 Region-Bucket 映射管理 API
+
+```
+# Region-Bucket 映射列表
+GET /api/region-bucket-mappings
+  - 请求参数: 
+    - page: 页码（默认1）
+    - page_size: 每页数量（默认10）
+    - region_code: 地域代码筛选（可选）
+    - bucket_name: 存储桶名称筛选（可选）
+  - 响应: {
+      "code": 0,
+      "msg": "success",
+      "data": {
+        "total": 100,
+        "page": 1,
+        "limit": 10,
+        "items": [
+          {
+            "id": 1,
+            "region_code": "cn-north-1",
+            "bucket_name": "example-bucket",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+          }
+        ]
+      }
+    }
+
+# 角色存储桶访问权限
+GET /api/roles/:id/bucket-access
+  - 响应: {
+      "code": 0,
+      "msg": "success",
+      "data": [
+        {
+          "id": 1,
+          "region_code": "cn-north-1",
+          "bucket_name": "example-bucket"
+        }
+      ]
+    }
+
+PUT /api/roles/:id/bucket-access
+  - 请求: {
+      "region_bucket_mapping_ids": [1, 2, 3]
+    }
+  - 响应: {
+      "code": 0,
+      "msg": "success",
+      "data": null
+    }
+
+# 角色存储桶访问权限管理
+GET /api/oss/role-bucket-access
+POST /api/oss/role-bucket-access
+GET /api/oss/role-bucket-access/:id
+PUT /api/oss/role-bucket-access/:id
+DELETE /api/oss/role-bucket-access/:id
+```
+
+### 4.5 文件管理 API
+
+// ... existing code ...

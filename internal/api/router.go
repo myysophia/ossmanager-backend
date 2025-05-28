@@ -69,6 +69,14 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 			roles.GET("/:id", roleHandler.Get)
 			roles.PUT("/:id", roleHandler.Update)
 			roles.DELETE("/:id", roleHandler.Delete)
+			roles.GET("/:id/bucket-access", roleHandler.GetRoleBucketAccess)
+			roles.PUT("/:id/bucket-access", roleHandler.UpdateRoleBucketAccess)
+		}
+
+		// 添加 region-bucket-mappings 路由组
+		regionBucketMappings := authorized.Group("/region-bucket-mappings")
+		{
+			regionBucketMappings.GET("", roleHandler.ListRegionBucketMappings)
 		}
 
 		// 权限管理

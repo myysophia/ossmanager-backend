@@ -177,3 +177,13 @@ psql -U postgres -d ossmanager -f pkg/db/migrations/001_init_schema.sql
 - READ: 读取权限，允许查看和下载存储桶中的文件
 - WRITE: 写入权限，允许上传和修改存储桶中的文件
 - DELETE: 删除权限，允许删除存储桶中的文件
+
+
+## 问题
+1. GORM 和数据库交互报错: ERROR: prepared statement "stmtcache_464a186ac913f304ddb716c8d1cc0951f7d514b166a797c4" already exists (SQLSTATE 42P05)
+   Supabase 使用了 PgBouncer 作为其连接池。PgBouncer 可以工作在不同的模式下，其中最常见的是：
+   Session 模式（session pooling）： 连接在整个客户端会话期间都保持不变。在这种模式下，预处理语句会话内是持久的。
+   Transaction 模式（transaction pooling）： 连接在每个事务结束后会返回到池中。最重要的是，在事务模式下，PgBouncer 在将连接返回到池中时，会清除该连接上所有已准备的语句。 这是为了确保从池中获取的连接是“干净”的，不带有前一个事务的残余状态。
+
+从报错看使用的是session pool模式。
+GORM 的 SkipDefaultTransaction: true 配置：你禁用了 GORM 的默认事务行为。这可能导致 GORM 认为它可以在不显式事务边界的情况下，持续在一个连接上操作。当 GORM 从连接池中获取一个连接时，它可能认为这个连接是一个全新的逻辑会话，然后尝试重新准备之前已经用过的同名语句。但如果 PgBouncer 处于 Session 模式，或者由于某些原因没有清除该语句，PostgreSQL 就会报错“已经存在”。

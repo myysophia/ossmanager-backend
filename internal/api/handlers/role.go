@@ -435,3 +435,51 @@ func (h *RoleHandler) DeleteRoleBucketAccess(c *gin.Context) {
 
 	h.Success(c, nil)
 }
+
+// ListRegionBucketMappings 获取所有 region-bucket 映射
+func (h *RoleHandler) ListRegionBucketMappings(c *gin.Context) {
+	// 获取分页参数
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "300"))
+
+	// 构建查询
+	query := h.DB.Model(&models.RegionBucketMapping{})
+
+	// 处理筛选条件
+	if regionCode := c.Query("region_code"); regionCode != "" {
+		query = query.Where("region_code LIKE ?", "%"+regionCode+"%")
+	}
+	if bucketName := c.Query("bucket_name"); bucketName != "" {
+		query = query.Where("bucket_name LIKE ?", "%"+bucketName+"%")
+	}
+
+	// 获取总数
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		logger.Error("获取 region-bucket 映射总数失败", zap.Error(err))
+		h.InternalError(c, "获取总数失败")
+		return
+	}
+
+	// 获取列表
+	var mappings []models.RegionBucketMapping
+	if err := query.Offset((page - 1) * pageSize).Limit(pageSize).Find(&mappings).Error; err != nil {
+		logger.Error("获取 region-bucket 映射列表失败", zap.Error(err))
+		h.InternalError(c, "获取列表失败")
+		return
+	}
+
+	// 构建返回数据
+	response := gin.H{
+		"code": 0,
+		"msg":  "success",
+		"data": gin.H{
+			"total": total,
+			"page":  page,
+			"limit": pageSize,
+			"items": mappings,
+		},
+	}
+
+	h.Success(c, response)
+}
