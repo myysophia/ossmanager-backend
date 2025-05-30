@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"gorm.io/gorm"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -14,12 +15,14 @@ import (
 // PermissionHandler 权限管理处理器
 type PermissionHandler struct {
 	*BaseHandler
+	DB *gorm.DB
 }
 
 // NewPermissionHandler 创建权限管理处理器
-func NewPermissionHandler() *PermissionHandler {
+func NewPermissionHandler(db *gorm.DB) *PermissionHandler {
 	return &PermissionHandler{
 		BaseHandler: NewBaseHandler(),
+		DB:          db.Debug(),
 	}
 }
 

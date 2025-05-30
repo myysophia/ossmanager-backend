@@ -30,7 +30,7 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 	auditLogHandler := handlers.NewAuditLogHandler()           // 审计日志处理器
 	userHandler := handlers.NewUserHandler()                   // 用户管理处理器
 	roleHandler := handlers.NewRoleHandler(db)                 // 角色管理处理器
-	permissionHandler := handlers.NewPermissionHandler()       // 权限管理处理器
+	permissionHandler := handlers.NewPermissionHandler(db)     // 权限管理处理器
 	regionBucketHandler := handlers.NewRegionBucketHandler(db) // 区域存储桶处理器
 
 	// 公开路由

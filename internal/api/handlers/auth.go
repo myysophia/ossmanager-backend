@@ -228,11 +228,20 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 
+	// 获取用户权限
+	permissions, err := auth.GetUserPermissions(userID.(uint))
+	if err != nil {
+		utils.ResponseError(c, utils.CodeInternalError, errors.New("获取用户权限失败"))
+		return
+	}
+
 	utils.ResponseWithData(c, gin.H{
-		"id":       user.ID,
-		"username": user.Username,
-		"email":    user.Email,
-		"roles":    user.Roles,
+		"id":          user.ID,
+		"username":    user.Username,
+		"email":       user.Email,
+		"real_name":   user.RealName,
+		"roles":       user.Roles,
+		"permissions": permissions,
 	})
 }
 

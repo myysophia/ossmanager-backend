@@ -152,19 +152,30 @@ func GetUserPermissions(userID uint) ([]models.Permission, error) {
 		roleIDs = append(roleIDs, role.ID)
 	}
 
-	// 查询这些角色拥有的权限
-	gormDB := db.GetDB()
+	// 使用 GORM 关联查询获取权限
 	var permissions []models.Permission
-
-	err = gormDB.Raw(`
-		SELECT DISTINCT p.* FROM permissions p
-		JOIN role_permissions rp ON p.id = rp.permission_id
-		WHERE rp.role_id IN (?)
-	`, roleIDs).Scan(&permissions).Error
+	err = db.GetDB().Model(&models.Role{}).
+		Where("id IN ?", roleIDs).
+		Preload("Permissions").
+		Find(&roles).Error
 
 	if err != nil {
 		logger.Error("查询角色权限失败", zap.Uints("roleIDs", roleIDs), zap.Error(err))
 		return nil, ErrDatabaseOperation
+	}
+
+	// 收集所有权限并去重
+	permissionMap := make(map[uint]models.Permission)
+	for _, role := range roles {
+		for _, perm := range role.Permissions {
+			permissionMap[perm.ID] = *perm
+		}
+	}
+
+	// 转换为切片
+	permissions = make([]models.Permission, 0, len(permissionMap))
+	for _, perm := range permissionMap {
+		permissions = append(permissions, perm)
 	}
 
 	return permissions, nil
