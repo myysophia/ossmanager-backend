@@ -314,3 +314,41 @@ func (h *UserHandler) createAuditLog(c *gin.Context, action, resourceType, resou
 			zap.Error(err))
 	}
 }
+
+// GetUserBucketAccess 获取用户可访问的存储桶列表
+func (h *UserHandler) GetUserBucketAccess(c *gin.Context) {
+	userID := c.Param("id")
+
+	// 获取用户信息
+	var user models.User
+	if err := db.GetDB().Preload("Roles").First(&user, userID).Error; err != nil {
+		h.NotFound(c, "用户不存在")
+		return
+	}
+
+	// 获取用户所有角色的ID
+	var roleIDs []uint
+	for _, role := range user.Roles {
+		roleIDs = append(roleIDs, role.ID)
+	}
+
+	// 如果没有角色，返回空列表
+	if len(roleIDs) == 0 {
+		h.Success(c, []models.RegionBucketMapping{})
+		return
+	}
+
+	// 查询用户角色关联的所有存储桶
+	var buckets []models.RegionBucketMapping
+	if err := db.GetDB().
+		Joins("JOIN role_region_bucket_access ON role_region_bucket_access.region_bucket_mapping_id = region_bucket_mapping.id").
+		Where("role_region_bucket_access.role_id IN ?", roleIDs).
+		Distinct().
+		Find(&buckets).Error; err != nil {
+		logger.Error("获取用户存储桶列表失败", zap.Error(err))
+		h.InternalError(c, "获取用户存储桶列表失败")
+		return
+	}
+
+	h.Success(c, buckets)
+}

@@ -59,6 +59,7 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 			users.GET("/:id", userHandler.Get)
 			users.PUT("/:id", userHandler.Update)
 			users.DELETE("/:id", userHandler.Delete)
+			users.GET("/:id/bucket-access", userHandler.GetUserBucketAccess)
 		}
 
 		// 角色管理

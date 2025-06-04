@@ -75,6 +75,24 @@ POST /api/users
 GET /api/users/:id
 PUT /api/users/:id
 DELETE /api/users/:id
+GET /api/users/:id/bucket-access  # 获取用户可访问的存储桶列表
+  - 请求参数: 
+    - id: 用户ID（路径参数）
+  - 响应: {
+      "code": 0,
+      "msg": "success",
+      "data": [
+        {
+          "id": 1,
+          "region_code": "cn-north-1",
+          "bucket_name": "example-bucket",
+          "created_at": "2024-01-01T00:00:00Z",
+          "updated_at": "2024-01-01T00:00:00Z"
+        }
+      ]
+    }
+  - 说明: 返回用户通过其角色可以访问的所有存储桶信息。如果用户没有任何角色，将返回空列表。
+  - 权限要求: 需要认证，且只能查看自己的存储桶列表或管理员可以查看所有用户的存储桶列表
 
 # 角色管理
 GET /api/roles

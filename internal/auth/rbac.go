@@ -194,7 +194,7 @@ func CheckBucketAccess(db *gorm.DB, userID uint, regionCode, bucketName string) 
 	if err != nil {
 		return false
 	}
-
+	logger.Debug("检查用户桶访问权限", zap.Uint("userID", userID), zap.String("regionCode", regionCode), zap.String("bucketName", bucketName), zap.Bool("hasAccess", count > 0))
 	return count > 0
 }
 
@@ -213,6 +213,6 @@ func GetUserAccessibleBuckets(db *gorm.DB, userID uint, regionCode string) ([]st
 	err := query.Distinct().
 		Pluck("region_bucket_mapping.bucket_name", &buckets).
 		Error
-
+	logger.Debug("获取可访问桶列表", zap.Strings("buckets", buckets))
 	return buckets, err
 }
