@@ -35,6 +35,15 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	// 获取用户ID
 	userID := c.GetUint("userID")
 
+	// 获取用户指定的 bucket 信息
+	regionCode := c.GetHeader("region_code")
+	bucketName := c.GetHeader("bucket_name")
+
+	if regionCode == "" || bucketName == "" {
+		h.Error(c, utils.CodeInvalidParams, "请指定 region_code 和 bucket_name")
+		return
+	}
+
 	// 获取存储配置
 	var config models.OSSConfig
 	if err := h.DB.Where("is_default = ?", true).First(&config).Error; err != nil {
@@ -43,7 +52,7 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, userID, config.Region, config.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, userID, regionCode, bucketName) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -73,7 +82,8 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	}
 	defer src.Close()
 
-	uploadURL, err := storage.Upload(src, objectKey)
+	// 使用用户指定的 bucket 上传
+	uploadURL, err := storage.UploadToBucket(src, objectKey, regionCode, bucketName)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "上传文件失败")
 		return
@@ -93,7 +103,7 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 		OriginalFilename: file.Filename,
 		FileSize:         file.Size,
 		StorageType:      config.StorageType,
-		Bucket:           config.Bucket,
+		Bucket:           bucketName,
 		ObjectKey:        objectKey,
 		DownloadURL:      uploadURL,
 		UploaderID:       utils.GetUserID(c),
@@ -108,7 +118,7 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	}
 
 	// 上传成功后，触发MD5计算
-	go h.triggerMD5Calculation(ossFile.ID)
+	//go h.triggerMD5Calculation(ossFile.ID)
 
 	h.Success(c, ossFile)
 }
@@ -116,8 +126,9 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 // InitMultipartUpload 初始化分片上传
 func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 	var req struct {
-		ConfigID string `json:"config_id" binding:"required"`
-		FileName string `json:"file_name" binding:"required"`
+		RegionCode string `json:"region_code" binding:"required"`
+		BucketName string `json:"bucket_name" binding:"required"`
+		FileName   string `json:"file_name" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -125,14 +136,15 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 		return
 	}
 
+	// 获取存储配置
 	var config models.OSSConfig
-	if err := h.DB.First(&config, req.ConfigID).Error; err != nil {
-		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
+	if err := h.DB.Where("is_default = ?", true).First(&config).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "获取默认存储配置失败")
 		return
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, config.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), req.RegionCode, req.BucketName) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -146,7 +158,7 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 	ext := filepath.Ext(req.FileName)
 	objectKey := utils.GenerateObjectKey(ext)
 
-	uploadID, urls, err := storage.InitMultipartUpload(objectKey)
+	uploadID, urls, err := storage.InitMultipartUploadToBucket(objectKey, req.RegionCode, req.BucketName)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "初始化分片上传失败")
 		return
@@ -162,10 +174,11 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 // CompleteMultipartUpload 完成分片上传
 func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 	var req struct {
-		ConfigID  string   `json:"config_id" binding:"required"`
-		ObjectKey string   `json:"object_key" binding:"required"`
-		UploadID  string   `json:"upload_id" binding:"required"`
-		Parts     []string `json:"parts" binding:"required"`
+		RegionCode string   `json:"region_code" binding:"required"`
+		BucketName string   `json:"bucket_name" binding:"required"`
+		ObjectKey  string   `json:"object_key" binding:"required"`
+		UploadID   string   `json:"upload_id" binding:"required"`
+		Parts      []string `json:"parts" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -173,14 +186,15 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 		return
 	}
 
+	// 获取存储配置
 	var config models.OSSConfig
-	if err := h.DB.First(&config, req.ConfigID).Error; err != nil {
-		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
+	if err := h.DB.Where("is_default = ?", true).First(&config).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "获取默认存储配置失败")
 		return
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, config.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), req.RegionCode, req.BucketName) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -200,16 +214,10 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 		}
 	}
 
-	downloadURL, err := storage.CompleteMultipartUpload(req.UploadID, ossParts, req.ObjectKey)
+	// 完成分片上传
+	url, err := storage.CompleteMultipartUploadToBucket(req.ObjectKey, req.UploadID, ossParts, req.RegionCode, req.BucketName)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "完成分片上传失败")
-		return
-	}
-
-	// 获取文件大小
-	fileSize, err := storage.GetObjectInfo(req.ObjectKey)
-	if err != nil {
-		h.Error(c, utils.CodeServerError, "获取文件信息失败")
 		return
 	}
 
@@ -217,12 +225,11 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 	ossFile := models.OSSFile{
 		ConfigID:         config.ID,
 		Filename:         req.ObjectKey,
-		OriginalFilename: req.ObjectKey,
-		FileSize:         fileSize,
+		OriginalFilename: req.ObjectKey, // 这里可能需要前端传入原始文件名
 		StorageType:      config.StorageType,
-		Bucket:           config.Bucket,
+		Bucket:           req.BucketName,
 		ObjectKey:        req.ObjectKey,
-		DownloadURL:      downloadURL,
+		DownloadURL:      url,
 		UploaderID:       utils.GetUserID(c),
 		UploadIP:         c.ClientIP(),
 		Status:           "ACTIVE",
@@ -234,7 +241,7 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 	}
 
 	// 上传成功后，触发MD5计算
-	go h.triggerMD5Calculation(ossFile.ID)
+	//go h.triggerMD5Calculation(ossFile.ID)
 
 	h.Success(c, ossFile)
 }
@@ -435,27 +442,27 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 // triggerMD5Calculation 触发MD5计算
 func (h *OSSFileHandler) triggerMD5Calculation(fileID uint) {
 	// 获取文件信息
-	var file models.OSSFile
-	if err := h.DB.First(&file, fileID).Error; err != nil {
-		logger.Error("获取文件信息失败", zap.Uint("file_id", fileID), zap.Error(err))
-		return
-	}
-
-	// 获取配置信息以获取Region
-	var config models.OSSConfig
-	if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
-		logger.Error("获取存储配置失败", zap.Uint("config_id", file.ConfigID), zap.Error(err))
-		return
-	}
-
-	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, file.UploaderID, config.Region, file.Bucket) {
-		logger.Error("没有权限访问该存储桶",
-			zap.Uint("user_id", file.UploaderID),
-			zap.String("region", config.Region),
-			zap.String("bucket", file.Bucket))
-		return
-	}
+	//var file models.OSSFile
+	//if err := h.DB.First(&file, fileID).Error; err != nil {
+	//	logger.Error("获取文件信息失败", zap.Uint("file_id", fileID), zap.Error(err))
+	//	return
+	//}
+	//
+	//// 获取配置信息以获取Region
+	//var config models.OSSConfig
+	//if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
+	//	logger.Error("获取存储配置失败", zap.Uint("config_id", file.ConfigID), zap.Error(err))
+	//	return
+	//}
+	//
+	//// 检查用户是否有权限访问该桶
+	//if !auth.CheckBucketAccess(h.DB, file.UploaderID, config.Region, file.Bucket) {
+	//	logger.Error("没有权限访问该存储桶",
+	//		zap.Uint("user_id", file.UploaderID),
+	//		zap.String("region", config.Region),
+	//		zap.String("bucket", file.Bucket))
+	//	return
+	//}
 
 	// 构建请求URL - 使用HTTP方式触发
 	//url := fmt.Sprintf("/api/v1/oss/files/%d/md5", fileID)
