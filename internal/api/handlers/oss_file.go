@@ -9,10 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
-	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -374,7 +372,7 @@ func (h *OSSFileHandler) Delete(c *gin.Context) {
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, userID, config.Region, file.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, userID, file.DownloadURL, file.Bucket) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -416,7 +414,7 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 	}
 
 	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, file.Bucket) {
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), file.DownloadURL, file.Bucket) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -427,10 +425,21 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 		return
 	}
 
-	downloadURL, expires, err := storage.GenerateDownloadURL(file.ObjectKey, 24*time.Hour)
-	if err != nil {
-		h.Error(c, utils.CodeServerError, "生成下载链接失败")
-		return
+	// 动态生成下载链接，传递 bucket 信息
+	var downloadURL string
+	var expires time.Time
+	if aliyunStorage, ok := storage.(*oss.AliyunOSSService); ok {
+		downloadURL, expires, err = aliyunStorage.GenerateDownloadURLWithBucket(file.ObjectKey, file.DownloadURL, 24*time.Hour)
+		if err != nil {
+			h.Error(c, utils.CodeServerError, "生成下载链接失败")
+			return
+		}
+	} else {
+		downloadURL, expires, err = storage.GenerateDownloadURL(file.ObjectKey, 24*time.Hour)
+		if err != nil {
+			h.Error(c, utils.CodeServerError, "生成下载链接失败")
+			return
+		}
 	}
 
 	h.Success(c, gin.H{
@@ -439,152 +448,51 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 	})
 }
 
-// triggerMD5Calculation 触发MD5计算
-func (h *OSSFileHandler) triggerMD5Calculation(fileID uint) {
-	// 获取文件信息
-	//var file models.OSSFile
-	//if err := h.DB.First(&file, fileID).Error; err != nil {
-	//	logger.Error("获取文件信息失败", zap.Uint("file_id", fileID), zap.Error(err))
-	//	return
-	//}
-	//
-	//// 获取配置信息以获取Region
-	//var config models.OSSConfig
-	//if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
-	//	logger.Error("获取存储配置失败", zap.Uint("config_id", file.ConfigID), zap.Error(err))
-	//	return
-	//}
-	//
-	//// 检查用户是否有权限访问该桶
-	//if !auth.CheckBucketAccess(h.DB, file.UploaderID, config.Region, file.Bucket) {
-	//	logger.Error("没有权限访问该存储桶",
-	//		zap.Uint("user_id", file.UploaderID),
-	//		zap.String("region", config.Region),
-	//		zap.String("bucket", file.Bucket))
-	//	return
-	//}
-
-	// 构建请求URL - 使用HTTP方式触发
-	//url := fmt.Sprintf("/api/v1/oss/files/%d/md5", fileID)
-	//logger.Info("准备触发MD5计算", zap.String("url", url), zap.Uint("file_id", fileID))
-	//
-	//// 直接调用模型方法计算MD5
-	//if file.MD5 != "" {
-	//	logger.Info("文件已有MD5值，无需计算", zap.Uint("file_id", fileID), zap.String("md5", file.MD5))
-	//	return
-	//}
-	//
-	//// 更新文件状态为计算中
-	//fileUpdate := models.OSSFile{
-	//	MD5Status: models.MD5StatusCalculating,
-	//}
-	//if err := h.DB.Model(&models.OSSFile{}).Where("id = ?", fileID).Updates(fileUpdate).Error; err != nil {
-	//	logger.Error("更新文件MD5状态失败", zap.Uint("file_id", fileID), zap.Error(err))
-	//	return
-	//}
-	//
-	//// 启动一个新的goroutine来计算MD5
-	//go func() {
-	//	// 查询文件存储配置
-	//	var config models.OSSConfig
-	//	if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
-	//		logger.Error("获取存储配置失败", zap.Uint("config_id", file.ConfigID), zap.Error(err))
-	//		h.updateMD5Status(fileID, models.MD5StatusFailed, "")
-	//		return
-	//	}
-	//
-	//	// 使用handler中的storageFactory
-	//	storage, err := h.storageFactory.GetStorageService(file.StorageType)
-	//	if err != nil {
-	//		logger.Error("获取存储服务失败", zap.String("storage_type", file.StorageType), zap.Error(err))
-	//		h.updateMD5Status(fileID, models.MD5StatusFailed, "")
-	//		return
-	//	}
-	//
-	//	// 下载文件并计算MD5
-	//	reader, err := storage.GetObject(file.ObjectKey)
-	//	if err != nil {
-	//		logger.Error("下载文件失败", zap.String("object_key", file.ObjectKey), zap.Error(err))
-	//		h.updateMD5Status(fileID, models.MD5StatusFailed, "")
-	//		return
-	//	}
-	//	defer reader.Close()
-	//
-	//	// 计算MD5
-	//	hash := md5.New()
-	//	if _, err := io.Copy(hash, reader); err != nil {
-	//		logger.Error("计算MD5失败", zap.String("object_key", file.ObjectKey), zap.Error(err))
-	//		h.updateMD5Status(fileID, models.MD5StatusFailed, "")
-	//		return
-	//	}
-	//
-	//	// 转换为十六进制字符串
-	//	md5Str := hex.EncodeToString(hash.Sum(nil))
-	//	logger.Info("文件MD5计算完成", zap.Uint("file_id", fileID), zap.String("md5", md5Str))
-	//
-	//	// 更新MD5
-	//	h.updateMD5Status(fileID, models.MD5StatusCompleted, md5Str)
-	//}()
-	//
-	//logger.Info("已触发文件MD5计算", zap.Uint("file_id", fileID))
-}
-
-// updateMD5Status 更新文件MD5状态
-func (h *OSSFileHandler) updateMD5Status(fileID uint, status string, md5 string) {
-	fileUpdate := models.OSSFile{
-		MD5Status: status,
-		MD5:       md5,
-	}
-	if err := h.DB.Model(&models.OSSFile{}).Where("id = ?", fileID).Updates(fileUpdate).Error; err != nil {
-		logger.Error("更新文件MD5状态失败", zap.Uint("file_id", fileID), zap.Error(err))
-	}
-}
-
 // GetByOriginalFilename 根据原始文件名获取文件详情
-func (h *OSSFileHandler) GetByOriginalFilename(c *gin.Context) {
-	filename := c.Query("filename")
-	if filename == "" {
-		h.Error(c, utils.CodeInvalidParams, "文件名不能为空")
-		return
-	}
-
-	var ossFile models.OSSFile
-	if err := h.DB.Where("original_filename = ? AND status = ?", filename, "ACTIVE").First(&ossFile).Error; err != nil {
-		h.Error(c, utils.CodeNotFound, "文件不存在")
-		return
-	}
-
-	// 获取配置信息以获取Region
-	var config models.OSSConfig
-	if err := h.DB.First(&config, ossFile.ConfigID).Error; err != nil {
-		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
-		return
-	}
-
-	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, ossFile.Bucket) {
-		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
-		return
-	}
-
-	storage, err := h.storageFactory.GetStorageService(ossFile.StorageType)
-	if err != nil {
-		h.Error(c, utils.CodeServerError, "获取存储服务失败")
-		return
-	}
-
-	downloadURL, expires, err := storage.GenerateDownloadURL(ossFile.ObjectKey, 24*time.Hour)
-	if err != nil {
-		h.Error(c, utils.CodeServerError, "生成下载链接失败")
-		return
-	}
-
-	// 更新下载URL和过期时间
-	ossFile.DownloadURL = downloadURL
-	ossFile.ExpiresAt = expires
-	if err := h.DB.Save(&ossFile).Error; err != nil {
-		logger.Error("更新文件下载URL失败", zap.Error(err))
-	}
-
-	h.Success(c, ossFile)
-}
+//func (h *OSSFileHandler) GetByOriginalFilename(c *gin.Context) {
+//	filename := c.Query("filename")
+//	if filename == "" {
+//		h.Error(c, utils.CodeInvalidParams, "文件名不能为空")
+//		return
+//	}
+//
+//	var ossFile models.OSSFile
+//	if err := h.DB.Where("original_filename = ? AND status = ?", filename, "ACTIVE").First(&ossFile).Error; err != nil {
+//		h.Error(c, utils.CodeNotFound, "文件不存在")
+//		return
+//	}
+//
+//	// 获取配置信息以获取Region
+//	var config models.OSSConfig
+//	if err := h.DB.First(&config, ossFile.ConfigID).Error; err != nil {
+//		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
+//		return
+//	}
+//
+//	// 检查用户是否有权限访问该桶
+//	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), config.Region, ossFile.Bucket) {
+//		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
+//		return
+//	}
+//
+//	storage, err := h.storageFactory.GetStorageService(ossFile.StorageType)
+//	if err != nil {
+//		h.Error(c, utils.CodeServerError, "获取存储服务失败")
+//		return
+//	}
+//
+//	downloadURL, expires, err := storage.GenerateDownloadURL(ossFile.ObjectKey, 24*time.Hour)
+//	if err != nil {
+//		h.Error(c, utils.CodeServerError, "生成下载链接失败")
+//		return
+//	}
+//
+//	// 更新下载URL和过期时间
+//	ossFile.DownloadURL = downloadURL
+//	ossFile.ExpiresAt = expires
+//	if err := h.DB.Save(&ossFile).Error; err != nil {
+//		logger.Error("更新文件下载URL失败", zap.Error(err))
+//	}
+//
+//	h.Success(c, ossFile)
+//}

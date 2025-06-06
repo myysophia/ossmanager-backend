@@ -3,8 +3,10 @@ package oss
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -364,4 +366,36 @@ func (s *AliyunOSSService) GetDownloadURL(objectKey string, expires time.Duratio
 	}
 
 	return url, nil
+}
+
+// GenerateDownloadURLWithBucket 生成指定 bucket 的下载链接
+func (s *AliyunOSSService) GenerateDownloadURLWithBucket(objectKey string, downloadURL string, expiration time.Duration) (string, time.Time, error) {
+	// downloadURL="https://iotdb-backup.oss-cn-hangzhou.aliyuncs.com/20250605%2F175218_13a29526-454f-40ca-bafd-357db0907690.pdf?Expires=1749203558&OSSAccessKeyId=LTAIW2v6S2BYAhZV&Signature=NCmqjIZ5GWrNbPuQrHVqwvvmF6c%3D"
+	parsedURL, err := url.Parse(downloadURL)
+	if err != nil {
+		panic(err)
+	}
+	hostParts := strings.Split(parsedURL.Host, ".")
+	if len(hostParts) < 4 {
+		panic("URL host format unexpected")
+	}
+	bucketName := hostParts[0]
+	regionName := hostParts[1]
+	//regi := strings.Split(regionName, "-")
+	//regionCode := regi[1] + "-" + regi[2]
+	endpoint := fmt.Sprintf("https://%s.aliyuncs.com", regionName)
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expires := time.Now().Add(expiration)
+	signedURL, err := bucket.SignURL(objectKey, oss.HTTPGet, int64(expiration.Seconds()))
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return signedURL, expires, nil
 }

@@ -2,6 +2,8 @@ package auth
 
 import (
 	"errors"
+	"net/url"
+	"strings"
 
 	"github.com/myysophia/ossmanager-backend/internal/db"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
@@ -182,19 +184,36 @@ func GetUserPermissions(userID uint) ([]models.Permission, error) {
 }
 
 // CheckBucketAccess 检查用户是否有权限访问指定的桶
-func CheckBucketAccess(db *gorm.DB, userID uint, regionCode, bucketName string) bool {
+func CheckBucketAccess(db *gorm.DB, userID uint, downloadURL, bucketName string) bool {
+	// download
+	//iotdb-backup.oss-cn-hangzhou
+	// care-eu.oss-eu-central-1
+	region := ""
+	if strings.Contains(downloadURL, "https://") {
+		parsedURL, err := url.Parse(downloadURL)
+		if err != nil {
+			panic(err)
+		}
+		hostParts := strings.Split(parsedURL.Host, ".")
+		regionName := hostParts[1]
+		region = strings.TrimPrefix(regionName, "oss-")
+		logger.Debug("检查用户桶访问权限", zap.Uint("userID", userID), zap.String("regionCode", region), zap.String("bucketName", bucketName))
+	} else {
+		region = downloadURL
+	}
+
 	var count int64
 	err := db.Model(&models.RegionBucketMapping{}).
 		Joins("JOIN role_region_bucket_access ON role_region_bucket_access.region_bucket_mapping_id = region_bucket_mapping.id").
 		Joins("JOIN user_roles ON user_roles.role_id = role_region_bucket_access.role_id").
 		Where("user_roles.user_id = ? AND region_bucket_mapping.region_code = ? AND region_bucket_mapping.bucket_name = ?",
-			userID, regionCode, bucketName).
+			userID, region, bucketName).
 		Count(&count).Error
 
 	if err != nil {
 		return false
 	}
-	logger.Debug("检查用户桶访问权限", zap.Uint("userID", userID), zap.String("regionCode", regionCode), zap.String("bucketName", bucketName), zap.Bool("hasAccess", count > 0))
+	logger.Debug("检查用户桶访问权限", zap.Uint("userID", userID), zap.String("regionCode", region), zap.String("bucketName", bucketName), zap.Bool("hasAccess", count > 0))
 	return count > 0
 }
 
