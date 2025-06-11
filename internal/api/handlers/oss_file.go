@@ -429,7 +429,7 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 	var downloadURL string
 	var expires time.Time
 	if aliyunStorage, ok := storage.(*oss.AliyunOSSService); ok {
-		downloadURL, expires, err = aliyunStorage.GenerateDownloadURLWithBucket(file.ObjectKey, file.DownloadURL, 24*time.Hour)
+		downloadURL, expires, err = aliyunStorage.GenerateDownloadURLWithBucket(file.ObjectKey, file.DownloadURL, 1*time.Hour)
 		if err != nil {
 			h.Error(c, utils.CodeServerError, "生成下载链接失败")
 			return
