@@ -70,7 +70,8 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 
 	// 生成文件路径
 	ext := filepath.Ext(file.Filename)
-	objectKey := utils.GenerateObjectKey(ext)
+	username, _ := c.Get("username")
+	objectKey := utils.GenerateObjectKey(username.(string), ext)
 
 	// 上传文件
 	src, err := file.Open()
@@ -154,7 +155,8 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 	}
 
 	ext := filepath.Ext(req.FileName)
-	objectKey := utils.GenerateObjectKey(ext)
+	username, _ := c.Get("username")
+	objectKey := utils.GenerateObjectKey(username.(string), ext)
 
 	uploadID, urls, err := storage.InitMultipartUploadToBucket(objectKey, req.RegionCode, req.BucketName)
 	if err != nil {
