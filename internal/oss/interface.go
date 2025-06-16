@@ -29,28 +29,26 @@ type StorageService interface {
 	// GetBucketName 获取存储桶名称
 	GetBucketName() string
 
-	// Upload 上传文件
-	// file: 文件内容
-	// objectKey: 对象键
-	// 返回：对象URL和错误
+	// Upload 上传文件到默认存储桶
 	Upload(file io.Reader, objectKey string) (string, error)
 
+	// UploadToBucket 上传文件到指定的存储桶
+	UploadToBucket(file io.Reader, objectKey string, regionCode string, bucketName string) (string, error)
+
 	// InitMultipartUpload 初始化分片上传
-	// filename: 文件名
-	// 返回：上传ID, 上传URL列表, 错误
-	InitMultipartUpload(filename string) (string, []string, error)
+	InitMultipartUpload(objectKey string) (string, []string, error)
+
+	// InitMultipartUploadToBucket 初始化分片上传到指定的存储桶
+	InitMultipartUploadToBucket(objectKey string, regionCode string, bucketName string) (string, []string, error)
 
 	// CompleteMultipartUpload 完成分片上传
-	// uploadID: 上传ID
-	// parts: 分片信息
-	// objectKey: 对象键
-	// 返回：对象URL, 错误
-	CompleteMultipartUpload(uploadID string, parts []Part, objectKey string) (string, error)
+	CompleteMultipartUpload(objectKey string, uploadID string, parts []Part) (string, error)
+
+	// CompleteMultipartUploadToBucket 完成分片上传到指定的存储桶
+	CompleteMultipartUploadToBucket(objectKey string, uploadID string, parts []Part, regionCode string, bucketName string) (string, error)
 
 	// AbortMultipartUpload 取消分片上传
-	// uploadID: 上传ID
-	// objectKey: 对象键
-	AbortMultipartUpload(uploadID string, objectKey string) error
+	AbortMultipartUpload(objectKey string, uploadID string) error
 
 	// GenerateDownloadURL 生成下载URL
 	// objectKey: 对象键
@@ -58,8 +56,7 @@ type StorageService interface {
 	// 返回：下载URL, 过期时间, 错误
 	GenerateDownloadURL(objectKey string, expiration time.Duration) (string, time.Time, error)
 
-	// DeleteObject 删除对象
-	// objectKey: 对象键
+	// DeleteObject 删除文件
 	DeleteObject(objectKey string) error
 
 	// GetObjectInfo 获取对象信息
@@ -77,6 +74,9 @@ type StorageService interface {
 	// fileID: 文件ID
 	// 返回：错误
 	TriggerMD5Calculation(objectKey string, fileID uint) error
+
+	// GetDownloadURL 获取文件下载URL
+	GetDownloadURL(objectKey string, expires time.Duration) (string, error)
 }
 
 // StorageFactory 存储服务工厂

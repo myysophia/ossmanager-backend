@@ -1850,6 +1850,450 @@ paths:
           schema:
             $ref: '#/definitions/ErrorResponse'
 
+  /oss/region-buckets:
+    get:
+      tags:
+        - oss-configs
+      summary: 获取区域存储桶映射列表
+      operationId: listRegionBuckets
+      security:
+        - Bearer: []
+      parameters:
+        - in: query
+          name: page
+          type: integer
+          description: 页码，从1开始
+          default: 1
+        - in: query
+          name: page_size
+          type: integer
+          description: 每页记录数
+          default: 10
+        - in: query
+          name: region
+          type: string
+          description: 按区域筛选
+        - in: query
+          name: bucket
+          type: string
+          description: 按存储桶筛选
+      responses:
+        200:
+          description: 成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 成功
+              data:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    description: 总记录数
+                    example: 10
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/definitions/RegionBucketMapping'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+    
+    post:
+      tags:
+        - oss-configs
+      summary: 创建区域存储桶映射
+      operationId: createRegionBucket
+      security:
+        - Bearer: []
+      parameters:
+        - in: body
+          name: mappingInfo
+          description: 映射信息
+          required: true
+          schema:
+            $ref: '#/definitions/RegionBucketMappingInput'
+      responses:
+        200:
+          description: 创建成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 创建成功
+              data:
+                $ref: '#/definitions/RegionBucketMapping'
+        400:
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+
+  /oss/region-buckets/{id}:
+    get:
+      tags:
+        - oss-configs
+      summary: 获取区域存储桶映射详情
+      operationId: getRegionBucket
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          type: integer
+          required: true
+          description: 映射ID
+      responses:
+        200:
+          description: 成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 成功
+              data:
+                $ref: '#/definitions/RegionBucketMapping'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        404:
+          description: 映射不存在
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+    
+    put:
+      tags:
+        - oss-configs
+      summary: 更新区域存储桶映射
+      operationId: updateRegionBucket
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          type: integer
+          required: true
+          description: 映射ID
+        - in: body
+          name: mappingInfo
+          description: 映射信息
+          required: true
+          schema:
+            $ref: '#/definitions/RegionBucketMappingInput'
+      responses:
+        200:
+          description: 更新成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 更新成功
+              data:
+                $ref: '#/definitions/RegionBucketMapping'
+        400:
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        404:
+          description: 映射不存在
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+    
+    delete:
+      tags:
+        - oss-configs
+      summary: 删除区域存储桶映射
+      operationId: deleteRegionBucket
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          type: integer
+          required: true
+          description: 映射ID
+      responses:
+        200:
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/Response'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        404:
+          description: 映射不存在
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+
+  /oss/role-bucket-access:
+    get:
+      tags:
+        - oss-configs
+      summary: 获取角色存储桶访问权限列表
+      operationId: listRoleBucketAccess
+      security:
+        - Bearer: []
+      parameters:
+        - in: query
+          name: page
+          type: integer
+          description: 页码，从1开始
+          default: 1
+        - in: query
+          name: page_size
+          type: integer
+          description: 每页记录数
+          default: 10
+        - in: query
+          name: role_id
+          type: integer
+          description: 按角色ID筛选
+        - in: query
+          name: bucket
+          type: string
+          description: 按存储桶筛选
+      responses:
+        200:
+          description: 成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 成功
+              data:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    description: 总记录数
+                    example: 10
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/definitions/RoleBucketAccess'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+    
+    post:
+      tags:
+        - oss-configs
+      summary: 创建角色存储桶访问权限
+      operationId: createRoleBucketAccess
+      security:
+        - Bearer: []
+      parameters:
+        - in: body
+          name: accessInfo
+          description: 访问权限信息
+          required: true
+          schema:
+            $ref: '#/definitions/RoleBucketAccessInput'
+      responses:
+        200:
+          description: 创建成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 创建成功
+              data:
+                $ref: '#/definitions/RoleBucketAccess'
+        400:
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+
+  /oss/role-bucket-access/{id}:
+    get:
+      tags:
+        - oss-configs
+      summary: 获取角色存储桶访问权限详情
+      operationId: getRoleBucketAccess
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          type: integer
+          required: true
+          description: 访问权限ID
+      responses:
+        200:
+          description: 成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 成功
+              data:
+                $ref: '#/definitions/RoleBucketAccess'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        404:
+          description: 访问权限不存在
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+    
+    put:
+      tags:
+        - oss-configs
+      summary: 更新角色存储桶访问权限
+      operationId: updateRoleBucketAccess
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          type: integer
+          required: true
+          description: 访问权限ID
+        - in: body
+          name: accessInfo
+          description: 访问权限信息
+          required: true
+          schema:
+            $ref: '#/definitions/RoleBucketAccessInput'
+      responses:
+        200:
+          description: 更新成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 更新成功
+              data:
+                $ref: '#/definitions/RoleBucketAccess'
+        400:
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        404:
+          description: 访问权限不存在
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+    
+    delete:
+      tags:
+        - oss-configs
+      summary: 删除角色存储桶访问权限
+      operationId: deleteRoleBucketAccess
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          type: integer
+          required: true
+          description: 访问权限ID
+      responses:
+        200:
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/Response'
+        401:
+          description: 未授权
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        404:
+          description: 访问权限不存在
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        500:
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+
 definitions:
   Response:
     type: object
@@ -2125,4 +2569,94 @@ definitions:
       updated_at:
         type: string
         format: date-time
-        example: "2023-01-01T12:00:00Z" 
+        example: "2023-01-01T12:00:00Z"
+
+  RegionBucketMapping:
+    type: object
+    properties:
+      id:
+        type: integer
+        example: 1
+      region:
+        type: string
+        example: us-east-1
+      bucket:
+        type: string
+        example: my-bucket
+      description:
+        type: string
+        example: 美国东部区域存储桶
+      created_at:
+        type: string
+        format: date-time
+        example: "2023-01-01T12:00:00Z"
+      updated_at:
+        type: string
+        format: date-time
+        example: "2023-01-01T12:00:00Z"
+
+  RegionBucketMappingInput:
+    type: object
+    required:
+      - region
+      - bucket
+    properties:
+      region:
+        type: string
+        example: us-east-1
+      bucket:
+        type: string
+        example: my-bucket
+      description:
+        type: string
+        example: 美国东部区域存储桶
+
+  RoleBucketAccess:
+    type: object
+    properties:
+      id:
+        type: integer
+        example: 1
+      role_id:
+        type: integer
+        example: 1
+      role_name:
+        type: string
+        example: admin
+      bucket:
+        type: string
+        example: my-bucket
+      permissions:
+        type: array
+        items:
+          type: string
+          enum: [READ, WRITE, DELETE]
+        example: ["READ", "WRITE"]
+      created_at:
+        type: string
+        format: date-time
+        example: "2023-01-01T12:00:00Z"
+      updated_at:
+        type: string
+        format: date-time
+        example: "2023-01-01T12:00:00Z"
+
+  RoleBucketAccessInput:
+    type: object
+    required:
+      - role_id
+      - bucket
+      - permissions
+    properties:
+      role_id:
+        type: integer
+        example: 1
+      bucket:
+        type: string
+        example: my-bucket
+      permissions:
+        type: array
+        items:
+          type: string
+          enum: [READ, WRITE, DELETE]
+        example: ["READ", "WRITE"] 

@@ -2,13 +2,17 @@ package oss
 
 import (
 	"fmt"
+	"io"
+	"net/url"
+	"path"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/myysophia/ossmanager-backend/internal/config"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"go.uber.org/zap"
-	"io"
-	"path"
-	"time"
 )
 
 // AliyunOSSService 阿里云OSS存储服务
@@ -94,7 +98,7 @@ func (s *AliyunOSSService) InitMultipartUpload(filename string) (string, []strin
 }
 
 // CompleteMultipartUpload 完成分片上传
-func (s *AliyunOSSService) CompleteMultipartUpload(uploadID string, parts []Part, objectKey string) (string, error) {
+func (s *AliyunOSSService) CompleteMultipartUpload(objectKey string, uploadID string, parts []Part) (string, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
 
 	// 将我们的Part结构转换为阿里云SDK的Part结构
@@ -243,4 +247,155 @@ func (s *AliyunOSSService) TriggerMD5Calculation(objectKey string, fileID uint) 
 		logger.Warn("阿里云OSS函数计算未启用，无法异步计算MD5值")
 		return fmt.Errorf("阿里云OSS函数计算未启用，无法异步计算MD5值")
 	}
+}
+
+// UploadToBucket 上传文件到指定的存储桶
+func (s *AliyunOSSService) UploadToBucket(file io.Reader, objectKey string, regionCode string, bucketName string) (string, error) {
+	// 创建指定地域的客户端
+	endpoint := fmt.Sprintf("https://oss-%s.aliyuncs.com", regionCode)
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return "", fmt.Errorf("创建OSS客户端失败: %w", err)
+	}
+
+	// 获取指定的存储桶
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return "", fmt.Errorf("获取存储桶失败: %w", err)
+	}
+
+	// 上传文件
+	err = bucket.PutObject(objectKey, file)
+	if err != nil {
+		return "", fmt.Errorf("上传文件失败: %w", err)
+	}
+
+	// 生成文件访问URL，过期时间设置为24小时
+	url, err := bucket.SignURL(objectKey, oss.HTTPGet, 24*3600)
+	if err != nil {
+		return "", fmt.Errorf("生成文件URL失败: %w", err)
+	}
+
+	return url, nil
+}
+
+// InitMultipartUploadToBucket 初始化分片上传到指定的存储桶
+func (s *AliyunOSSService) InitMultipartUploadToBucket(objectKey string, regionCode string, bucketName string) (string, []string, error) {
+	// 创建指定地域的客户端
+	client, err := oss.New(s.config.Endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return "", nil, fmt.Errorf("创建OSS客户端失败: %w", err)
+	}
+
+	// 获取指定的存储桶
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return "", nil, fmt.Errorf("获取存储桶失败: %w", err)
+	}
+
+	// 初始化分片上传
+	result, err := bucket.InitiateMultipartUpload(objectKey)
+	if err != nil {
+		return "", nil, fmt.Errorf("初始化分片上传失败: %w", err)
+	}
+
+	// 生成分片上传URL
+	urls := make([]string, 0)
+	for i := 1; i <= 100; i++ { // 假设最多100个分片
+		options := []oss.Option{
+			oss.AddParam("uploadId", result.UploadID),
+			oss.AddParam("partNumber", strconv.Itoa(i)),
+		}
+		url, err := bucket.SignURL(objectKey, oss.HTTPPut, 3600, options...)
+		if err != nil {
+			return "", nil, fmt.Errorf("生成分片上传URL失败: %w", err)
+		}
+		urls = append(urls, url)
+	}
+
+	return result.UploadID, urls, nil
+}
+
+// CompleteMultipartUploadToBucket 完成分片上传到指定的存储桶
+func (s *AliyunOSSService) CompleteMultipartUploadToBucket(objectKey string, uploadID string, parts []Part, regionCode string, bucketName string) (string, error) {
+	// 创建指定地域的客户端
+	client, err := oss.New(s.config.Endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return "", fmt.Errorf("创建OSS客户端失败: %w", err)
+	}
+
+	// 获取指定的存储桶
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return "", fmt.Errorf("获取存储桶失败: %w", err)
+	}
+
+	// 转换parts为阿里云OSS的Part类型
+	ossParts := make([]oss.UploadPart, len(parts))
+	for i, part := range parts {
+		ossParts[i] = oss.UploadPart{
+			PartNumber: part.PartNumber,
+			ETag:       part.ETag,
+		}
+	}
+
+	// 完成分片上传
+	_, err = bucket.CompleteMultipartUpload(oss.InitiateMultipartUploadResult{
+		Key:      objectKey,
+		UploadID: uploadID,
+	}, ossParts)
+	if err != nil {
+		return "", fmt.Errorf("完成分片上传失败: %w", err)
+	}
+
+	// 生成文件访问URL
+	url, err := bucket.SignURL(objectKey, oss.HTTPGet, 24*3600)
+	if err != nil {
+		return "", fmt.Errorf("生成文件URL失败: %w", err)
+	}
+
+	return url, nil
+}
+
+// GetDownloadURL 获取文件下载URL
+func (s *AliyunOSSService) GetDownloadURL(objectKey string, expires time.Duration) (string, error) {
+	// 生成文件访问URL
+	url, err := s.bucket.SignURL(objectKey, oss.HTTPGet, int64(expires.Seconds()))
+	if err != nil {
+		return "", fmt.Errorf("生成文件URL失败: %w", err)
+	}
+
+	return url, nil
+}
+
+// GenerateDownloadURLWithBucket 生成指定 bucket 的下载链接
+func (s *AliyunOSSService) GenerateDownloadURLWithBucket(objectKey string, downloadURL string, expiration time.Duration) (string, time.Time, error) {
+	// downloadURL="https://iotdb-backup.oss-cn-hangzhou.aliyuncs.com/20250605%2F175218_13a29526-454f-40ca-bafd-357db0907690.pdf?Expires=1749203558&OSSAccessKeyId=LTAIW2v6S2BYAhZV&Signature=NCmqjIZ5GWrNbPuQrHVqwvvmF6c%3D"
+	parsedURL, err := url.Parse(downloadURL)
+	if err != nil {
+		panic(err)
+	}
+	hostParts := strings.Split(parsedURL.Host, ".")
+	if len(hostParts) < 4 {
+		panic("URL host format unexpected")
+	}
+	bucketName := hostParts[0]
+	regionName := hostParts[1]
+	//regi := strings.Split(regionName, "-")
+	//regionCode := regi[1] + "-" + regi[2]
+	endpoint := fmt.Sprintf("https://%s.aliyuncs.com", regionName)
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expires := time.Now().Add(expiration)
+	signedURL, err := bucket.SignURL(objectKey, oss.HTTPGet, int64(expiration.Seconds()))
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return signedURL, expires, nil
 }

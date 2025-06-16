@@ -51,10 +51,10 @@ func (f *DefaultStorageFactory) GetStorageService(storageType string) (StorageSe
 	switch storageType {
 	case StorageTypeAliyunOSS:
 		service, err = NewAliyunOSSService(&f.ossConfig.AliyunOSS)
-	case StorageTypeAWSS3:
-		service, err = NewAWSS3Service(&f.ossConfig.AWSS3)
-	case StorageTypeR2:
-		service, err = NewCloudflareR2Service(&f.ossConfig.CloudflareR2)
+	//case StorageTypeAWSS3:
+	//	service, err = NewAWSS3Service(&f.ossConfig.AWSS3)
+	//case StorageTypeR2:
+	//	service, err = NewCloudflareR2Service(&f.ossConfig.CloudflareR2)
 	default:
 		return nil, fmt.Errorf("不支持的存储类型: %s", storageType)
 	}

@@ -72,7 +72,7 @@ func RoleMiddleware(requiredRoles ...string) gin.HandlerFunc {
 
 // AdminMiddleware 管理员检查中间件
 func AdminMiddleware() gin.HandlerFunc {
-	return RoleMiddleware("admin")
+	return RoleMiddleware()
 }
 
 // checkPermissions 检查用户是否拥有指定权限
