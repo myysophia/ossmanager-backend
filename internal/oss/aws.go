@@ -211,6 +211,33 @@ func (s *AWSS3Service) GenerateDownloadURL(objectKey string, expiration time.Dur
 	return presignResult.URL, expires, nil
 }
 
+// GenerateUploadURL 生成PUT上传URL
+func (s *AWSS3Service) GenerateUploadURL(objectKey, regionCode, bucketName string) (string, error) {
+	creds := credentials.NewStaticCredentialsProvider(s.config.AccessKeyID, s.config.SecretAccessKey, "")
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.TODO(),
+		awsconfig.WithRegion(regionCode),
+		awsconfig.WithCredentialsProvider(creds),
+	)
+	if err != nil {
+		return "", fmt.Errorf("创建AWS配置失败: %w", err)
+	}
+
+	client := s3.NewFromConfig(awsCfg)
+	presignClient := s3.NewPresignClient(client)
+
+	presignResult, err := presignClient.PresignPutObject(context.Background(), &s3.PutObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(objectKey),
+	}, func(opts *s3.PresignOptions) {
+		opts.Expires = s.config.GetOSSURLExpiration()
+	})
+	if err != nil {
+		return "", fmt.Errorf("生成AWS S3上传URL失败: %w", err)
+	}
+
+	return presignResult.URL, nil
+}
+
 // DeleteObject 删除对象
 func (s *AWSS3Service) DeleteObject(objectKey string) error {
 	fullObjectKey := s.getObjectKey(objectKey)

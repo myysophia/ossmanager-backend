@@ -28,6 +28,52 @@ func NewOSSFileHandler(storageFactory oss.StorageFactory, db *gorm.DB) *OSSFileH
 	}
 }
 
+// GenerateUploadURL 生成上传URL
+func (h *OSSFileHandler) GenerateUploadURL(c *gin.Context) {
+	var req struct {
+		RegionCode string `json:"region_code" binding:"required"`
+		BucketName string `json:"bucket_name" binding:"required"`
+		FileName   string `json:"file_name" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.Error(c, utils.CodeInvalidParams, "参数错误")
+		return
+	}
+
+	var config models.OSSConfig
+	if err := h.DB.Where("is_default = ?", true).First(&config).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "获取默认存储配置失败")
+		return
+	}
+
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), req.RegionCode, req.BucketName) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
+		return
+	}
+
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
+		return
+	}
+
+	ext := filepath.Ext(req.FileName)
+	username, _ := c.Get("username")
+	objectKey := utils.GenerateObjectKey(username.(string), ext)
+
+	url, err := storage.GenerateUploadURL(objectKey, req.RegionCode, req.BucketName)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "生成上传URL失败")
+		return
+	}
+
+	h.Success(c, gin.H{
+		"object_key": objectKey,
+		"upload_url": url,
+	})
+}
+
 // Upload 上传文件
 func (h *OSSFileHandler) Upload(c *gin.Context) {
 	// 获取用户ID
