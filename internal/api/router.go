@@ -95,6 +95,7 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 		authorized.GET("/oss/files", ossFileHandler.List)
 		authorized.DELETE("/oss/files/:id", ossFileHandler.Delete)
 		authorized.GET("/oss/files/:id/download", ossFileHandler.GetDownloadURL)
+		authorized.POST("/oss/upload-url", ossFileHandler.GenerateUploadURL)
 		//authorized.GET("/oss/files/by-filename", ossFileHandler.GetByOriginalFilename)
 
 		// 分片上传

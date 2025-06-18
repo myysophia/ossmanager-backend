@@ -399,3 +399,24 @@ func (s *AliyunOSSService) GenerateDownloadURLWithBucket(objectKey string, downl
 	}
 	return signedURL, expires, nil
 }
+
+// GenerateUploadURL 生成PUT上传URL
+func (s *AliyunOSSService) GenerateUploadURL(objectKey, regionCode, bucketName string) (string, error) {
+	endpoint := fmt.Sprintf("https://oss-%s.aliyuncs.com", regionCode)
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return "", fmt.Errorf("创建OSS客户端失败: %w", err)
+	}
+
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return "", fmt.Errorf("获取存储桶失败: %w", err)
+	}
+
+	signedURL, err := bucket.SignURL(objectKey, oss.HTTPPut, int64(s.config.GetOSSURLExpiration().Seconds()))
+	if err != nil {
+		return "", fmt.Errorf("生成上传URL失败: %w", err)
+	}
+
+	return signedURL, nil
+}
