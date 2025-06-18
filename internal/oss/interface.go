@@ -47,6 +47,12 @@ type StorageService interface {
 	// CompleteMultipartUploadToBucket 完成分片上传到指定的存储桶
 	CompleteMultipartUploadToBucket(objectKey string, uploadID string, parts []Part, regionCode string, bucketName string) (string, error)
 
+	// GenerateUploadURL 生成上传URL
+	// objectKey: 对象键
+	// regionCode: 区域代码
+	// bucketName: 存储桶名称
+	GenerateUploadURL(objectKey, regionCode, bucketName string) (string, error)
+
 	// AbortMultipartUpload 取消分片上传
 	AbortMultipartUpload(objectKey string, uploadID string) error
 
