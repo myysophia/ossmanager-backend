@@ -62,13 +62,17 @@ type OSSConfig struct {
 }
 
 type AliyunOSSConfig struct {
-	AccessKeyID     string `mapstructure:"access_key_id"`
-	AccessKeySecret string `mapstructure:"access_key_secret"`
-	Endpoint        string
-	Bucket          string
-	Region          string
-	UploadDir       string `mapstructure:"upload_dir"`
-	URLExpireTime   int    `mapstructure:"url_expire_time"`
+	AccessKeyID        string `mapstructure:"access_key_id"`
+	AccessKeySecret    string `mapstructure:"access_key_secret"`
+	Endpoint           string
+	Bucket             string
+	Region             string
+	UploadDir          string `mapstructure:"upload_dir"`
+	URLExpireTime      int    `mapstructure:"url_expire_time"`
+	TransferAccelerate struct {
+		Enabled bool   `mapstructure:"enabled"`
+		Type    string `mapstructure:"type"` // "global" 或 "overseas"
+	} `mapstructure:"transfer_accelerate"`
 	FunctionCompute struct {
 		Enabled         bool   `mapstructure:"enabled"`
 		Endpoint        string `mapstructure:"endpoint"`
