@@ -251,6 +251,7 @@ func (s *AliyunOSSService) TriggerMD5Calculation(objectKey string, fileID uint) 
 
 // UploadToBucket 上传文件到指定的存储桶
 func (s *AliyunOSSService) UploadToBucket(file io.Reader, objectKey string, regionCode string, bucketName string) (string, error) {
+	logger.Info("上传文件到指定的存储桶", zap.String("objectKey", objectKey), zap.String("regionCode", regionCode), zap.String("bucketName", bucketName))
 	// 创建指定地域的客户端
 	endpoint := fmt.Sprintf("https://oss-%s.aliyuncs.com", regionCode)
 	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
