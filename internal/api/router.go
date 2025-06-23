@@ -32,6 +32,7 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 	roleHandler := handlers.NewRoleHandler(db)                 // 角色管理处理器
 	permissionHandler := handlers.NewPermissionHandler(db)     // 权限管理处理器
 	regionBucketHandler := handlers.NewRegionBucketHandler(db) // 区域存储桶处理器
+	uploadProgressHandler := handlers.NewUploadProgressHandler()
 
 	// 公开路由
 	public := router.Group("/api/v1")
@@ -146,6 +147,12 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 			roleBucketAccess.GET("/:id", roleHandler.GetRoleBucketAccess)
 			roleBucketAccess.PUT("/:id", roleHandler.UpdateRoleBucketAccess)
 			roleBucketAccess.DELETE("/:id", roleHandler.DeleteRoleBucketAccess)
+		}
+
+		uploads := authorized.Group("/uploads")
+		{
+			uploads.GET("/:id/progress", uploadProgressHandler.GetProgress)
+			uploads.GET("/:id/stream", uploadProgressHandler.StreamProgress)
 		}
 	}
 

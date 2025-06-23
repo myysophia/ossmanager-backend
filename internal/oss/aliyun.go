@@ -385,6 +385,40 @@ func (s *AliyunOSSService) UploadToBucket(file io.Reader, objectKey string, regi
 	return url, nil
 }
 
+// UploadToBucketWithProgress 上传文件到指定的存储桶并回调上传进度
+func (s *AliyunOSSService) UploadToBucketWithProgress(file io.Reader, objectKey string, regionCode string, bucketName string, progressCallback func(consumedBytes, totalBytes int64)) (string, error) {
+	listener := &progressListener{callback: progressCallback}
+
+	endpoint := s.getEndpoint(regionCode)
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return "", err
+	}
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return "", err
+	}
+	options := []oss.Option{oss.Progress(listener)}
+	if err := bucket.PutObject(objectKey, file, options...); err != nil {
+		return "", err
+	}
+	url, err := bucket.SignURL(objectKey, oss.HTTPGet, 24*3600)
+	if err != nil {
+		return "", err
+	}
+	return url, nil
+}
+
+type progressListener struct {
+	callback func(consumedBytes, totalBytes int64)
+}
+
+func (pl *progressListener) ProgressChanged(event *oss.ProgressEvent) {
+	if pl.callback != nil {
+		pl.callback(event.ConsumedBytes, event.TotalBytes)
+	}
+}
+
 // InitMultipartUploadToBucket 初始化分片上传到指定的存储桶
 func (s *AliyunOSSService) InitMultipartUploadToBucket(objectKey string, regionCode string, bucketName string) (string, []string, error) {
 	logger.Info("初始化分片上传到指定的存储桶",

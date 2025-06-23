@@ -3,6 +3,10 @@ package oss
 import (
 	"context"
 	"fmt"
+	"io"
+	"path"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -11,9 +15,6 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/config"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"go.uber.org/zap"
-	"io"
-	"path"
-	"time"
 )
 
 // AWSS3Service AWS S3存储服务
@@ -99,6 +100,12 @@ func (s *AWSS3Service) Upload(file io.Reader, objectKey string) (string, error) 
 	}
 
 	return presignResult.URL, nil
+}
+
+// UploadToBucketWithProgress 上传文件到指定的存储桶并回调上传进度
+func (s *AWSS3Service) UploadToBucketWithProgress(file io.Reader, objectKey string, regionCode string, bucketName string, progressCallback func(consumedBytes, totalBytes int64)) (string, error) {
+	// AWS S3 默认使用配置中的桶，暂不支持回调进度，直接调用 Upload
+	return s.Upload(file, objectKey)
 }
 
 // InitMultipartUpload 初始化分片上传

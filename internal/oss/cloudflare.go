@@ -3,6 +3,10 @@ package oss
 import (
 	"context"
 	"fmt"
+	"io"
+	"path"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -11,9 +15,6 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/config"
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 	"go.uber.org/zap"
-	"io"
-	"path"
-	"time"
 )
 
 // CloudflareR2Service Cloudflare R2存储服务
@@ -113,6 +114,12 @@ func (s *CloudflareR2Service) Upload(file io.Reader, objectKey string) (string, 
 	}
 
 	return presignResult.URL, nil
+}
+
+// UploadToBucketWithProgress 上传文件到指定的存储桶并回调上传进度
+func (s *CloudflareR2Service) UploadToBucketWithProgress(file io.Reader, objectKey string, regionCode string, bucketName string, progressCallback func(consumedBytes, totalBytes int64)) (string, error) {
+	// R2 同样暂未实现进度回调，直接调用 Upload
+	return s.Upload(file, objectKey)
 }
 
 // InitMultipartUpload 初始化分片上传
