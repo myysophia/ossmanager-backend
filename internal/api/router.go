@@ -40,6 +40,14 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 		// 认证相关
 		public.POST("/auth/login", authHandler.Login)
 		public.POST("/auth/register", authHandler.Register)
+
+		// 上传进度查询（不需要认证，因为taskId本身就是安全的UUID）
+		uploads := public.Group("/uploads")
+		{
+			uploads.POST("/init", uploadProgressHandler.Init)
+			uploads.GET("/:id/progress", uploadProgressHandler.GetProgress)
+			uploads.GET("/:id/stream", uploadProgressHandler.StreamProgress)
+		}
 	}
 
 	// 需要认证的路由
@@ -149,12 +157,6 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 			roleBucketAccess.DELETE("/:id", roleHandler.DeleteRoleBucketAccess)
 		}
 
-                uploads := authorized.Group("/uploads")
-                {
-                        uploads.POST("/init", uploadProgressHandler.Init)
-                        uploads.GET("/:id/progress", uploadProgressHandler.GetProgress)
-                        uploads.GET("/:id/stream", uploadProgressHandler.StreamProgress)
-                }
 	}
 
 	return router
