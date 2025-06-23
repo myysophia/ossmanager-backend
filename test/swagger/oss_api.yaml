@@ -2212,6 +2212,56 @@ paths:
           description: 服务器错误
           schema:
             $ref: '#/definitions/ErrorResponse'
+
+  /uploads/{id}/progress:
+    get:
+      tags:
+        - uploads
+      summary: 查询上传进度
+      operationId: getUploadProgress
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          type: string
+          required: true
+          description: 上传任务ID
+      responses:
+        200:
+          description: 当前上传进度
+          schema:
+            $ref: '#/definitions/UploadProgress'
+        404:
+          description: 任务不存在
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+
+  /uploads/{id}/stream:
+    get:
+      tags:
+        - uploads
+      summary: 实时上传进度SSE
+      operationId: streamUploadProgress
+      security:
+        - Bearer: []
+      produces:
+        - text/event-stream
+      parameters:
+        - in: path
+          name: id
+          type: string
+          required: true
+          description: 上传任务ID
+      responses:
+        200:
+          description: SSE流式返回进度
+          schema:
+            type: string
+        404:
+          description: 任务不存在
+          schema:
+            $ref: '#/definitions/ErrorResponse'
     
     put:
       tags:
@@ -2659,4 +2709,16 @@ definitions:
         items:
           type: string
           enum: [READ, WRITE, DELETE]
-        example: ["READ", "WRITE"] 
+        example: ["READ", "WRITE"]
+
+  UploadProgress:
+    type: object
+    properties:
+      total:
+        type: integer
+        description: 总字节数
+        example: 1048576
+      uploaded:
+        type: integer
+        description: 已上传字节数
+        example: 4096
