@@ -149,11 +149,12 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 			roleBucketAccess.DELETE("/:id", roleHandler.DeleteRoleBucketAccess)
 		}
 
-		uploads := authorized.Group("/uploads")
-		{
-			uploads.GET("/:id/progress", uploadProgressHandler.GetProgress)
-			uploads.GET("/:id/stream", uploadProgressHandler.StreamProgress)
-		}
+                uploads := authorized.Group("/uploads")
+                {
+                        uploads.POST("/init", uploadProgressHandler.Init)
+                        uploads.GET("/:id/progress", uploadProgressHandler.GetProgress)
+                        uploads.GET("/:id/stream", uploadProgressHandler.StreamProgress)
+                }
 	}
 
 	return router

@@ -2262,6 +2262,43 @@ paths:
           description: 任务不存在
           schema:
             $ref: '#/definitions/ErrorResponse'
+
+  /uploads/init:
+    post:
+      tags:
+        - uploads
+      summary: 创建上传任务
+      operationId: initUploadTask
+      security:
+        - Bearer: []
+      parameters:
+        - in: body
+          name: info
+          required: false
+          schema:
+            type: object
+            properties:
+              total:
+                type: integer
+                description: 文件总字节数
+      responses:
+        200:
+          description: 创建成功
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 0
+              message:
+                type: string
+                example: 创建成功
+              data:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: 上传任务ID
     
     put:
       tags:

@@ -75,9 +75,15 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	username, _ := c.Get("username")
 	objectKey := utils.GenerateObjectKey(username.(string), ext)
 
-	// 生成上传任务ID并记录总大小
-	taskID := uuid.NewString()
-	upload.DefaultManager.Start(taskID, file.Size)
+        // 如果客户端提供了上传任务ID，则使用该ID；否则生成新的
+        taskID := c.GetHeader("Upload-Task-ID")
+        if taskID == "" {
+                taskID = c.Query("task_id")
+        }
+        if taskID == "" {
+                taskID = uuid.NewString()
+        }
+        upload.DefaultManager.Start(taskID, file.Size)
 
 	src, err := file.Open()
 	if err != nil {

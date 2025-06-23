@@ -1,10 +1,11 @@
 package handlers
 
 import (
-	"net/http"
+        "net/http"
 
-	"github.com/gin-gonic/gin"
-	"github.com/myysophia/ossmanager-backend/internal/upload"
+        "github.com/gin-gonic/gin"
+        "github.com/google/uuid"
+        "github.com/myysophia/ossmanager-backend/internal/upload"
 )
 
 // UploadProgressHandler 处理上传进度查询和SSE
@@ -13,7 +14,22 @@ type UploadProgressHandler struct {
 }
 
 func NewUploadProgressHandler() *UploadProgressHandler {
-	return &UploadProgressHandler{BaseHandler: NewBaseHandler()}
+        return &UploadProgressHandler{BaseHandler: NewBaseHandler()}
+}
+
+// Init 创建一个新的上传进度任务并返回任务ID
+func (h *UploadProgressHandler) Init(c *gin.Context) {
+        var req struct {
+                Total int64 `json:"total"`
+        }
+        if err := c.ShouldBindJSON(&req); err != nil {
+                h.BadRequest(c, "参数错误")
+                return
+        }
+
+        id := uuid.NewString()
+        upload.DefaultManager.Start(id, req.Total)
+        h.Success(c, gin.H{"id": id})
 }
 
 // GetProgress 返回上传进度
