@@ -5,11 +5,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/myysophia/ossmanager-backend/internal/auth"
 
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
+	"github.com/myysophia/ossmanager-backend/internal/upload"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"gorm.io/gorm"
 )
@@ -73,7 +75,16 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	username, _ := c.Get("username")
 	objectKey := utils.GenerateObjectKey(username.(string), ext)
 
-	// 上传文件
+        // 如果客户端提供了上传任务ID，则使用该ID；否则生成新的
+        taskID := c.GetHeader("Upload-Task-ID")
+        if taskID == "" {
+                taskID = c.Query("task_id")
+        }
+        if taskID == "" {
+                taskID = uuid.NewString()
+        }
+        upload.DefaultManager.Start(taskID, file.Size)
+
 	src, err := file.Open()
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "打开文件失败")
@@ -81,12 +92,20 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	}
 	defer src.Close()
 
-	// 使用用户指定的 bucket 上传
-	uploadURL, err := storage.UploadToBucket(src, objectKey, regionCode, bucketName)
+	// 使用用户指定的 bucket 上传并监听进度
+	uploadURL, err := storage.UploadToBucketWithProgress(src, objectKey, regionCode, bucketName, func(consumed, total int64) {
+		if total == 0 {
+			total = file.Size
+		}
+		upload.DefaultManager.Update(taskID, consumed)
+	})
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "上传文件失败")
+		upload.DefaultManager.Finish(taskID)
 		return
 	}
+
+	upload.DefaultManager.Finish(taskID)
 
 	// 从配置中获取过期时间，如果未配置则默认为24小时
 	expireTime := config.URLExpireTime

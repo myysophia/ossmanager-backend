@@ -35,6 +35,10 @@ type StorageService interface {
 	// UploadToBucket 上传文件到指定的存储桶
 	UploadToBucket(file io.Reader, objectKey string, regionCode string, bucketName string) (string, error)
 
+	// UploadToBucketWithProgress 上传文件到指定的存储桶并回调上传进度
+	// progressCallback: 回调函数，参数为已上传字节数和总字节数
+	UploadToBucketWithProgress(file io.Reader, objectKey string, regionCode string, bucketName string, progressCallback func(consumedBytes, totalBytes int64)) (string, error)
+
 	// InitMultipartUpload 初始化分片上传
 	InitMultipartUpload(objectKey string) (string, []string, error)
 
