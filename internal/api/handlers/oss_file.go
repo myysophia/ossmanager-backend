@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"io"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +17,34 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/utils"
 	"gorm.io/gorm"
 )
+
+// ProgressReader 用于追踪读取进度的Reader
+type ProgressReader struct {
+	reader   io.Reader
+	total    int64
+	read     int64
+	callback func(read, total int64)
+}
+
+// NewProgressReader 创建一个新的进度Reader
+func NewProgressReader(reader io.Reader, total int64, callback func(read, total int64)) *ProgressReader {
+	return &ProgressReader{
+		reader:   reader,
+		total:    total,
+		read:     0,
+		callback: callback,
+	}
+}
+
+// Read 实现io.Reader接口
+func (pr *ProgressReader) Read(p []byte) (n int, err error) {
+	n, err = pr.reader.Read(p)
+	pr.read += int64(n)
+	if pr.callback != nil {
+		pr.callback(pr.read, pr.total)
+	}
+	return n, err
+}
 
 type OSSFileHandler struct {
 	*BaseHandler
@@ -30,8 +60,23 @@ func NewOSSFileHandler(storageFactory oss.StorageFactory, db *gorm.DB) *OSSFileH
 	}
 }
 
-// Upload 上传文件
+// Upload 上传文件 - 支持流式上传
 func (h *OSSFileHandler) Upload(c *gin.Context) {
+	// 检查Content-Type以确定使用哪种上传方式
+	contentType := c.GetHeader("Content-Type")
+
+	// 如果是multipart/form-data，使用表单上传方式
+	if strings.Contains(contentType, "multipart/form-data") {
+		h.uploadFormFile(c)
+		return
+	}
+
+	// 否则使用流式上传方式
+	h.uploadStream(c)
+}
+
+// uploadFormFile 表单文件上传（保持原有逻辑）
+func (h *OSSFileHandler) uploadFormFile(c *gin.Context) {
 	// 获取用户ID
 	userID := c.GetUint("userID")
 
@@ -75,15 +120,15 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 	username, _ := c.Get("username")
 	objectKey := utils.GenerateObjectKey(username.(string), ext)
 
-        // 如果客户端提供了上传任务ID，则使用该ID；否则生成新的
-        taskID := c.GetHeader("Upload-Task-ID")
-        if taskID == "" {
-                taskID = c.Query("task_id")
-        }
-        if taskID == "" {
-                taskID = uuid.NewString()
-        }
-        upload.DefaultManager.Start(taskID, file.Size)
+	// 如果客户端提供了上传任务ID，则使用该ID；否则生成新的
+	taskID := c.GetHeader("Upload-Task-ID")
+	if taskID == "" {
+		taskID = c.Query("task_id")
+	}
+	if taskID == "" {
+		taskID = uuid.NewString()
+	}
+	upload.DefaultManager.Start(taskID, file.Size)
 
 	src, err := file.Open()
 	if err != nil {
@@ -135,8 +180,121 @@ func (h *OSSFileHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	// 上传成功后，触发MD5计算
-	//go h.triggerMD5Calculation(ossFile.ID)
+	h.Success(c, ossFile)
+}
+
+// uploadStream 流式文件上传
+func (h *OSSFileHandler) uploadStream(c *gin.Context) {
+	// 获取用户ID
+	userID := c.GetUint("userID")
+
+	// 获取用户指定的 bucket 信息
+	regionCode := c.GetHeader("region_code")
+	bucketName := c.GetHeader("bucket_name")
+
+	// 获取文件元数据（从请求头中获取）
+	originalFilename := c.GetHeader("X-File-Name")
+	contentLengthStr := c.GetHeader("Content-Length")
+
+	if regionCode == "" || bucketName == "" {
+		h.Error(c, utils.CodeInvalidParams, "请指定 region_code 和 bucket_name")
+		return
+	}
+
+	if originalFilename == "" {
+		h.Error(c, utils.CodeInvalidParams, "请在 X-File-Name 头中指定文件名")
+		return
+	}
+
+	if contentLengthStr == "" {
+		h.Error(c, utils.CodeInvalidParams, "请求头中缺少 Content-Length")
+		return
+	}
+
+	// 解析文件大小
+	fileSize, err := strconv.ParseInt(contentLengthStr, 10, 64)
+	if err != nil {
+		h.Error(c, utils.CodeInvalidParams, "无效的 Content-Length")
+		return
+	}
+
+	// 获取存储配置
+	var config models.OSSConfig
+	if err := h.DB.Where("is_default = ?", true).First(&config).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "获取默认存储配置失败")
+		return
+	}
+
+	// 检查用户是否有权限访问该桶
+	if !auth.CheckBucketAccess(h.DB, userID, regionCode, bucketName) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
+		return
+	}
+
+	// 获取存储服务
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
+		return
+	}
+
+	// 生成文件路径
+	ext := filepath.Ext(originalFilename)
+	username, _ := c.Get("username")
+	objectKey := utils.GenerateObjectKey(username.(string), ext)
+
+	// 如果客户端提供了上传任务ID，则使用该ID；否则生成新的
+	taskID := c.GetHeader("Upload-Task-ID")
+	if taskID == "" {
+		taskID = c.Query("task_id")
+	}
+	if taskID == "" {
+		taskID = uuid.NewString()
+	}
+	upload.DefaultManager.Start(taskID, fileSize)
+
+	// 创建进度追踪的Reader，包装请求体
+	progressReader := NewProgressReader(c.Request.Body, fileSize, func(read, total int64) {
+		upload.DefaultManager.Update(taskID, read)
+	})
+
+	// 使用流式的方式上传到指定的bucket
+	uploadURL, err := storage.UploadToBucket(progressReader, objectKey, regionCode, bucketName)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "上传文件失败")
+		upload.DefaultManager.Finish(taskID)
+		return
+	}
+
+	upload.DefaultManager.Finish(taskID)
+
+	// 从配置中获取过期时间，如果未配置则默认为24小时
+	expireTime := config.URLExpireTime
+	if expireTime <= 0 {
+		expireTime = 24 * 3600 // 默认24小时
+	}
+	expiresAt := time.Now().Add(time.Duration(expireTime) * time.Second)
+
+	// 保存文件记录
+	ossFile := models.OSSFile{
+		ConfigID:         config.ID,
+		Filename:         objectKey,
+		OriginalFilename: originalFilename,
+		FileSize:         fileSize,
+		StorageType:      config.StorageType,
+		Bucket:           bucketName,
+		ObjectKey:        objectKey,
+		DownloadURL:      uploadURL,
+		UploaderID:       utils.GetUserID(c),
+		UploadIP:         c.ClientIP(),
+		ExpiresAt:        expiresAt,
+		Status:           "ACTIVE",
+	}
+
+	if err := h.DB.Create(&ossFile).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "保存文件记录失败")
+		return
+	}
 
 	h.Success(c, ossFile)
 }
