@@ -43,6 +43,11 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 
 		// 上传进度查询（不需要认证，因为taskId本身就是安全的UUID）
 		uploads := public.Group("/uploads")
+		uploads.Use(
+			middleware.SSEMiddleware(),       // SSE连接稳定性中间件
+			middleware.HTTP1OnlyMiddleware(), // 强制HTTP/1.1
+			middleware.NoBufferMiddleware(),  // 禁用缓冲
+		)
 		{
 			uploads.POST("/init", uploadProgressHandler.Init)
 			uploads.GET("/:id/progress", uploadProgressHandler.GetProgress)

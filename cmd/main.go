@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -55,10 +56,17 @@ func main() {
 	// 设置路由
 	router := api.SetupRouter(storageFactory, md5Calculator, db.GetDB())
 
-	// 创建HTTP服务器
+	// 创建HTTP服务器 - 禁用HTTP/2以确保SSE连接稳定性
 	server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.App.Host, cfg.App.Port),
 		Handler: router,
+		// 禁用HTTP/2，强制使用HTTP/1.1
+		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
+		// 设置超时时间，优化长连接
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	// 优雅关闭服务器
