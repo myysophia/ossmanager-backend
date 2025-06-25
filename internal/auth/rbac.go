@@ -206,8 +206,8 @@ func CheckBucketAccess(db *gorm.DB, userID uint, downloadURL, bucketName string)
 	err := db.Model(&models.RegionBucketMapping{}).
 		Joins("JOIN role_region_bucket_access ON role_region_bucket_access.region_bucket_mapping_id = region_bucket_mapping.id").
 		Joins("JOIN user_roles ON user_roles.role_id = role_region_bucket_access.role_id").
-		Where("user_roles.user_id = ? AND region_bucket_mapping.region_code = ? AND region_bucket_mapping.bucket_name = ?",
-			userID, region, bucketName).
+		Where("user_roles.user_id = ?  AND region_bucket_mapping.bucket_name = ?",
+			userID, bucketName).
 		Count(&count).Error
 
 	if err != nil {

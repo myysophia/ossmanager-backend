@@ -32,6 +32,7 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 	roleHandler := handlers.NewRoleHandler(db)                 // 角色管理处理器
 	permissionHandler := handlers.NewPermissionHandler(db)     // 权限管理处理器
 	regionBucketHandler := handlers.NewRegionBucketHandler(db) // 区域存储桶处理器
+	uploadProgressHandler := handlers.NewUploadProgressHandler()
 
 	// 公开路由
 	public := router.Group("/api/v1")
@@ -39,6 +40,14 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 		// 认证相关
 		public.POST("/auth/login", authHandler.Login)
 		public.POST("/auth/register", authHandler.Register)
+
+		// 上传进度查询（不需要认证，因为taskId本身就是安全的UUID）
+		uploads := public.Group("/uploads")
+		{
+			uploads.POST("/init", uploadProgressHandler.Init)
+			uploads.GET("/:id/progress", uploadProgressHandler.GetProgress)
+			uploads.GET("/:id/stream", uploadProgressHandler.StreamProgress)
+		}
 	}
 
 	// 需要认证的路由
@@ -147,6 +156,7 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 			roleBucketAccess.PUT("/:id", roleHandler.UpdateRoleBucketAccess)
 			roleBucketAccess.DELETE("/:id", roleHandler.DeleteRoleBucketAccess)
 		}
+
 	}
 
 	return router

@@ -62,6 +62,29 @@ func (s *AliyunOSSService) getObjectKey(filename string) string {
 	return path.Join(s.uploadDir, filename)
 }
 
+// getEndpoint 根据配置和region获取正确的endpoint
+func (s *AliyunOSSService) getEndpoint(regionCode string) string {
+	// 如果开启了传输加速，使用加速域名
+	if s.config.TransferAccelerate.Enabled {
+		switch s.config.TransferAccelerate.Type {
+		case "overseas":
+			return "https://oss-accelerate-overseas.aliyuncs.com"
+		case "global":
+			fallthrough
+		default:
+			return "https://oss-accelerate.aliyuncs.com"
+		}
+	}
+
+	// 如果有指定region，使用region特定的endpoint
+	if regionCode != "" {
+		return fmt.Sprintf("https://oss-%s.aliyuncs.com", regionCode)
+	}
+
+	// 否则使用配置中的默认endpoint
+	return s.config.Endpoint
+}
+
 // Upload 上传文件
 func (s *AliyunOSSService) Upload(file io.Reader, objectKey string) (string, error) {
 	fullObjectKey := s.getObjectKey(objectKey)
@@ -251,40 +274,168 @@ func (s *AliyunOSSService) TriggerMD5Calculation(objectKey string, fileID uint) 
 
 // UploadToBucket 上传文件到指定的存储桶
 func (s *AliyunOSSService) UploadToBucket(file io.Reader, objectKey string, regionCode string, bucketName string) (string, error) {
-	logger.Info("上传文件到指定的存储桶", zap.String("objectKey", objectKey), zap.String("regionCode", regionCode), zap.String("bucketName", bucketName))
-	// 创建指定地域的客户端
-	endpoint := fmt.Sprintf("https://oss-%s.aliyuncs.com", regionCode)
+	logger.Info("开始上传文件到指定的存储桶",
+		zap.String("objectKey", objectKey),
+		zap.String("regionCode", regionCode),
+		zap.String("bucketName", bucketName))
+
+	// 验证输入参数
+	if file == nil {
+		logger.Error("上传文件失败：文件流为空")
+		return "", fmt.Errorf("文件流不能为空")
+	}
+	if objectKey == "" {
+		logger.Error("上传文件失败：对象键为空")
+		return "", fmt.Errorf("对象键不能为空")
+	}
+	if regionCode == "" {
+		logger.Error("上传文件失败：区域代码为空")
+		return "", fmt.Errorf("区域代码不能为空")
+	}
+	if bucketName == "" {
+		logger.Error("上传文件失败：存储桶名称为空")
+		return "", fmt.Errorf("存储桶名称不能为空")
+	}
+
+	// 获取正确的endpoint（考虑传输加速）
+	endpoint := s.getEndpoint(regionCode)
+
+	// 安全地显示AccessKeyID，保护密钥安全
+	maskedAccessKeyID := s.config.AccessKeyID
+	if len(maskedAccessKeyID) > 8 {
+		maskedAccessKeyID = maskedAccessKeyID[:8] + "***"
+	} else if len(maskedAccessKeyID) > 3 {
+		maskedAccessKeyID = maskedAccessKeyID[:3] + "***"
+	} else {
+		maskedAccessKeyID = "***"
+	}
+
+	logger.Info("创建OSS客户端",
+		zap.String("endpoint", endpoint),
+		zap.String("regionCode", regionCode),
+		zap.Bool("transferAccelerate", s.config.TransferAccelerate.Enabled),
+		zap.String("accelerateType", s.config.TransferAccelerate.Type),
+		zap.String("accessKeyID", maskedAccessKeyID))
+
 	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
 	if err != nil {
+		logger.Error("创建OSS客户端失败",
+			zap.String("endpoint", endpoint),
+			zap.String("regionCode", regionCode),
+			zap.Error(err))
 		return "", fmt.Errorf("创建OSS客户端失败: %w", err)
 	}
+	logger.Info("OSS客户端创建成功")
 
 	// 获取指定的存储桶
+	logger.Info("获取存储桶", zap.String("bucketName", bucketName))
 	bucket, err := client.Bucket(bucketName)
 	if err != nil {
+		logger.Error("获取存储桶失败",
+			zap.String("bucketName", bucketName),
+			zap.String("regionCode", regionCode),
+			zap.Error(err))
 		return "", fmt.Errorf("获取存储桶失败: %w", err)
 	}
+	logger.Info("存储桶获取成功", zap.String("bucketName", bucketName))
 
 	// 上传文件
+	logger.Info("开始上传文件",
+		zap.String("objectKey", objectKey),
+		zap.String("bucketName", bucketName))
+
 	err = bucket.PutObject(objectKey, file)
 	if err != nil {
+		logger.Error("上传文件失败",
+			zap.String("objectKey", objectKey),
+			zap.String("bucketName", bucketName),
+			zap.String("regionCode", regionCode),
+			zap.Error(err))
 		return "", fmt.Errorf("上传文件失败: %w", err)
 	}
+	logger.Info("文件上传成功", zap.String("objectKey", objectKey))
 
 	// 生成文件访问URL，过期时间设置为24小时
+	logger.Info("生成文件访问URL",
+		zap.String("objectKey", objectKey),
+		zap.Int64("expireSeconds", 24*3600))
+
 	url, err := bucket.SignURL(objectKey, oss.HTTPGet, 24*3600)
 	if err != nil {
+		logger.Error("生成文件URL失败",
+			zap.String("objectKey", objectKey),
+			zap.String("bucketName", bucketName),
+			zap.String("regionCode", regionCode),
+			zap.Error(err))
 		return "", fmt.Errorf("生成文件URL失败: %w", err)
 	}
+
+	// 安全地显示URL，避免日志过长
+	displayURL := url
+	if len(url) > 100 {
+		displayURL = url[:100] + "..."
+	}
+
+	logger.Info("文件上传完成",
+		zap.String("objectKey", objectKey),
+		zap.String("bucketName", bucketName),
+		zap.String("regionCode", regionCode),
+		zap.String("url", displayURL))
 
 	return url, nil
 }
 
+// UploadToBucketWithProgress 上传文件到指定的存储桶并回调上传进度
+func (s *AliyunOSSService) UploadToBucketWithProgress(file io.Reader, objectKey string, regionCode string, bucketName string, progressCallback func(consumedBytes, totalBytes int64)) (string, error) {
+	listener := &progressListener{callback: progressCallback}
+
+	endpoint := s.getEndpoint(regionCode)
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return "", err
+	}
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return "", err
+	}
+	options := []oss.Option{oss.Progress(listener)}
+	if err := bucket.PutObject(objectKey, file, options...); err != nil {
+		return "", err
+	}
+	url, err := bucket.SignURL(objectKey, oss.HTTPGet, 24*3600)
+	if err != nil {
+		return "", err
+	}
+	return url, nil
+}
+
+type progressListener struct {
+	callback func(consumedBytes, totalBytes int64)
+}
+
+func (pl *progressListener) ProgressChanged(event *oss.ProgressEvent) {
+	if pl.callback != nil {
+		pl.callback(event.ConsumedBytes, event.TotalBytes)
+	}
+}
+
 // InitMultipartUploadToBucket 初始化分片上传到指定的存储桶
 func (s *AliyunOSSService) InitMultipartUploadToBucket(objectKey string, regionCode string, bucketName string) (string, []string, error) {
+	logger.Info("初始化分片上传到指定的存储桶",
+		zap.String("objectKey", objectKey),
+		zap.String("regionCode", regionCode),
+		zap.String("bucketName", bucketName))
+
+	// 获取正确的endpoint（考虑传输加速）
+	endpoint := s.getEndpoint(regionCode)
+	logger.Info("创建分片上传OSS客户端",
+		zap.String("endpoint", endpoint),
+		zap.Bool("transferAccelerate", s.config.TransferAccelerate.Enabled))
+
 	// 创建指定地域的客户端
-	client, err := oss.New(s.config.Endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
 	if err != nil {
+		logger.Error("创建分片上传OSS客户端失败", zap.Error(err))
 		return "", nil, fmt.Errorf("创建OSS客户端失败: %w", err)
 	}
 
@@ -319,9 +470,23 @@ func (s *AliyunOSSService) InitMultipartUploadToBucket(objectKey string, regionC
 
 // CompleteMultipartUploadToBucket 完成分片上传到指定的存储桶
 func (s *AliyunOSSService) CompleteMultipartUploadToBucket(objectKey string, uploadID string, parts []Part, regionCode string, bucketName string) (string, error) {
+	logger.Info("完成分片上传到指定的存储桶",
+		zap.String("objectKey", objectKey),
+		zap.String("uploadID", uploadID),
+		zap.String("regionCode", regionCode),
+		zap.String("bucketName", bucketName),
+		zap.Int("partsCount", len(parts)))
+
+	// 获取正确的endpoint（考虑传输加速）
+	endpoint := s.getEndpoint(regionCode)
+	logger.Info("创建完成分片上传OSS客户端",
+		zap.String("endpoint", endpoint),
+		zap.Bool("transferAccelerate", s.config.TransferAccelerate.Enabled))
+
 	// 创建指定地域的客户端
-	client, err := oss.New(s.config.Endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
 	if err != nil {
+		logger.Error("创建完成分片上传OSS客户端失败", zap.Error(err))
 		return "", fmt.Errorf("创建OSS客户端失败: %w", err)
 	}
 
