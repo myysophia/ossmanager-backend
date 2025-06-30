@@ -381,8 +381,6 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 		}
 
 		if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
-			// 上传失败，中止分片上传（使用正确的方法）
-			h.safeAbortMultipartUpload(storage, uploadID, objectKey, regionCode, bucketName)
 			upload.DefaultManager.Fail(taskID, "读取分片数据失败")
 			return "", fmt.Errorf("读取分片数据失败: %v", readErr)
 		}
@@ -403,8 +401,6 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 		}
 
 		if err != nil {
-			// 上传失败，中止分片上传（使用正确的方法）
-			h.safeAbortMultipartUpload(storage, uploadID, objectKey, regionCode, bucketName)
 			upload.DefaultManager.Fail(taskID, fmt.Sprintf("上传分片 %d 失败", partNumber))
 			return "", fmt.Errorf("上传分片 %d 失败: %v", partNumber, err)
 		}
@@ -491,39 +487,55 @@ func (h *OSSFileHandler) uploadChunk(storage oss.StorageService, uploadURL strin
 	// 这里需要根据具体的存储服务实现分片上传
 	// 由于不同的云服务商有不同的分片上传API，这里提供一个通用的HTTP PUT方法
 
-	req, err := http.NewRequest("PUT", uploadURL, bytes.NewReader(data))
-	if err != nil {
-		return "", err
+	maxRetries := 3
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			logger.Warn("重试上传分片",
+				zap.Int("part_number", partNumber),
+				zap.Int("retry", attempt),
+			)
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
+
+		req, err := http.NewRequest("PUT", uploadURL, bytes.NewReader(data))
+		if err != nil {
+			return "", err
+		}
+
+		req.Header.Set("Content-Type", "application/octet-stream")
+		req.Header.Set("Content-Length", strconv.Itoa(len(data)))
+
+		client := &http.Client{Timeout: 30 * time.Second}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			lastErr = fmt.Errorf("上传分片失败，状态码: %d, 响应: %s", resp.StatusCode, string(body))
+			continue
+		}
+
+		// 获取ETag
+		etag := resp.Header.Get("ETag")
+		if etag == "" {
+			lastErr = fmt.Errorf("无法获取分片ETag")
+			continue
+		}
+
+		// 移除ETag中的引号
+		etag = strings.Trim(etag, "\"")
+
+		return etag, nil
 	}
 
-	req.Header.Set("Content-Type", "application/octet-stream")
-	req.Header.Set("Content-Length", strconv.Itoa(len(data)))
-
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("上传分片失败，状态码: %d, 响应: %s", resp.StatusCode, string(body))
-	}
-
-	// 获取ETag
-	etag := resp.Header.Get("ETag")
-	if etag == "" {
-		return "", fmt.Errorf("无法获取分片ETag")
-	}
-
-	// 移除ETag中的引号
-	etag = strings.Trim(etag, "\"")
-
-	return etag, nil
+	return "", lastErr
 }
 
 // saveFileRecord 保存文件记录
@@ -757,6 +769,46 @@ func (h *OSSFileHandler) AbortMultipartUpload(c *gin.Context) {
 	}
 
 	h.Success(c, nil)
+}
+
+// ListUploadedParts 获取已上传的分片编号
+func (h *OSSFileHandler) ListUploadedParts(c *gin.Context) {
+	regionCode := c.Query("region_code")
+	bucketName := c.Query("bucket_name")
+	objectKey := c.Query("object_key")
+	uploadID := c.Query("upload_id")
+
+	if regionCode == "" || bucketName == "" || objectKey == "" || uploadID == "" {
+		h.Error(c, utils.CodeInvalidParams, "参数错误")
+		return
+	}
+
+	// 获取存储配置
+	var config models.OSSConfig
+	if err := h.DB.Where("is_default = ?", true).First(&config).Error; err != nil {
+		h.Error(c, utils.CodeServerError, "获取默认存储配置失败")
+		return
+	}
+
+	// 权限检查
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), regionCode, bucketName) {
+		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
+		return
+	}
+
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
+		return
+	}
+
+	parts, err := storage.ListUploadedPartsToBucket(objectKey, uploadID, regionCode, bucketName)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "获取已上传分片失败")
+		return
+	}
+
+	h.Success(c, gin.H{"parts": parts})
 }
 
 // List 获取文件列表，相同文件名只获取最新一个

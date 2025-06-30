@@ -140,6 +140,22 @@ Authorization: Bearer <token>
 }
 ```
 
+#### 查询已上传分片
+```http
+GET /api/v1/oss/multipart/parts?region_code=cn-hangzhou&bucket_name=test-bucket&object_key=user123/20231215/abc123.zip&upload_id=upload-id-123
+Authorization: Bearer <token>
+```
+
+**响应:**
+```json
+{
+    "success": true,
+    "data": {
+        "parts": [1, 2, 3]
+    }
+}
+```
+
 ### 3. 进度查询接口
 
 #### 获取进度快照

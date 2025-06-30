@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -236,6 +237,47 @@ func (s *AliyunOSSService) AbortMultipartUploadToBucket(uploadID string, objectK
 		zap.String("objectKey", objectKey))
 
 	return nil
+}
+
+// ListUploadedPartsToBucket 获取已上传的分片列表
+func (s *AliyunOSSService) ListUploadedPartsToBucket(objectKey string, uploadID string, regionCode string, bucketName string) ([]int, error) {
+	// 获取正确的endpoint（考虑传输加速）
+	endpoint := s.getEndpoint(regionCode)
+
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return nil, fmt.Errorf("创建OSS客户端失败: %w", err)
+	}
+
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return nil, fmt.Errorf("获取存储桶失败: %w", err)
+	}
+
+	var uploadedParts []int
+	marker := 0
+	for {
+		result, err := bucket.ListUploadedParts(oss.InitiateMultipartUploadResult{
+			Key:      objectKey,
+			UploadID: uploadID,
+		}, oss.PartNumberMarker(marker))
+		if err != nil {
+			return nil, fmt.Errorf("获取已上传分片失败: %w", err)
+		}
+
+		for _, part := range result.UploadedParts {
+			uploadedParts = append(uploadedParts, part.PartNumber)
+		}
+
+		if !result.IsTruncated {
+			break
+		}
+		next, _ := strconv.Atoi(result.NextPartNumberMarker)
+		marker = next
+	}
+
+	sort.Ints(uploadedParts)
+	return uploadedParts, nil
 }
 
 // GenerateDownloadURL 生成下载URL

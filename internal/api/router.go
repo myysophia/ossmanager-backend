@@ -115,6 +115,7 @@ func SetupRouter(storageFactory oss.StorageFactory, md5Calculator *function.MD5C
 		authorized.POST("/oss/multipart/init", ossFileHandler.InitMultipartUpload)
 		authorized.POST("/oss/multipart/complete", ossFileHandler.CompleteMultipartUpload)
 		authorized.DELETE("/oss/multipart/abort", ossFileHandler.AbortMultipartUpload)
+		authorized.GET("/oss/multipart/parts", ossFileHandler.ListUploadedParts)
 
 		// MD5计算相关
 		authorized.POST("/oss/files/:id/md5", md5Handler.TriggerCalculation)
