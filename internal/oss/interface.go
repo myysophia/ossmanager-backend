@@ -54,6 +54,9 @@ type StorageService interface {
 	// AbortMultipartUpload 取消分片上传
 	AbortMultipartUpload(objectKey string, uploadID string) error
 
+	// AbortMultipartUploadToBucket 取消指定存储桶的分片上传
+	AbortMultipartUploadToBucket(uploadID string, objectKey string, regionCode string, bucketName string) error
+
 	// GenerateDownloadURL 生成下载URL
 	// objectKey: 对象键
 	// expiration: 过期时间

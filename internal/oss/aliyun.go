@@ -178,6 +178,66 @@ func (s *AliyunOSSService) AbortMultipartUpload(uploadID string, objectKey strin
 	return nil
 }
 
+// AbortMultipartUploadToBucket 取消指定存储桶的分片上传
+func (s *AliyunOSSService) AbortMultipartUploadToBucket(uploadID string, objectKey string, regionCode string, bucketName string) error {
+	logger.Info("开始取消分片上传",
+		zap.String("uploadID", uploadID),
+		zap.String("objectKey", objectKey),
+		zap.String("regionCode", regionCode),
+		zap.String("bucketName", bucketName))
+
+	// 获取正确的endpoint
+	endpoint := s.getEndpoint(regionCode)
+
+	// 创建临时的OSS客户端
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		logger.Error("创建OSS客户端失败（用于取消分片上传）",
+			zap.String("endpoint", endpoint),
+			zap.String("regionCode", regionCode),
+			zap.Error(err))
+		// 即使取消失败也不返回错误，避免阻塞主流程
+		logger.Warn("取消分片上传失败，但继续处理以避免阻塞")
+		return nil
+	}
+
+	// 获取指定的存储桶
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		logger.Error("获取存储桶失败（用于取消分片上传）",
+			zap.String("bucketName", bucketName),
+			zap.String("regionCode", regionCode),
+			zap.Error(err))
+		// 即使取消失败也不返回错误，避免阻塞主流程
+		logger.Warn("取消分片上传失败，但继续处理以避免阻塞")
+		return nil
+	}
+
+	// 取消分片上传
+	err = bucket.AbortMultipartUpload(oss.InitiateMultipartUploadResult{
+		Key:      objectKey,
+		UploadID: uploadID,
+	})
+
+	if err != nil {
+		logger.Error("取消阿里云OSS分片上传失败",
+			zap.String("objectKey", objectKey),
+			zap.String("uploadID", uploadID),
+			zap.String("regionCode", regionCode),
+			zap.String("bucketName", bucketName),
+			zap.Error(err))
+		// 即使取消失败也不返回错误，避免阻塞主流程
+		logger.Warn("取消分片上传失败，但继续处理以避免阻塞")
+		return nil
+	}
+
+	logger.Info("分片上传取消成功",
+		zap.String("uploadID", uploadID),
+		zap.String("objectKey", objectKey))
+
+	return nil
+}
+
 // GenerateDownloadURL 生成下载URL
 func (s *AliyunOSSService) GenerateDownloadURL(objectKey string, expiration time.Duration) (string, time.Time, error) {
 	fullObjectKey := s.getObjectKey(objectKey)

@@ -1,7 +1,11 @@
 package handlers
 
 import (
+	"bufio"
+	"bytes"
+	"fmt"
 	"io"
+	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -9,12 +13,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/myysophia/ossmanager-backend/internal/auth"
+	"github.com/myysophia/ossmanager-backend/internal/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
 	"github.com/myysophia/ossmanager-backend/internal/upload"
 	"github.com/myysophia/ossmanager-backend/internal/utils"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -60,23 +66,31 @@ func NewOSSFileHandler(storageFactory oss.StorageFactory, db *gorm.DB) *OSSFileH
 	}
 }
 
-// Upload 上传文件 - 支持流式上传
+// Upload 上传文件 - 智能选择上传方式
 func (h *OSSFileHandler) Upload(c *gin.Context) {
 	// 检查Content-Type以确定使用哪种上传方式
 	contentType := c.GetHeader("Content-Type")
 
+	// 获取文件大小阈值配置（默认100MB）
+	chunkThreshold := int64(100 * 1024 * 1024) // 100MB
+	if thresholdStr := c.GetHeader("X-Chunk-Threshold"); thresholdStr != "" {
+		if threshold, err := strconv.ParseInt(thresholdStr, 10, 64); err == nil {
+			chunkThreshold = threshold
+		}
+	}
+
 	// 如果是multipart/form-data，使用表单上传方式
 	if strings.Contains(contentType, "multipart/form-data") {
-		h.uploadFormFile(c)
+		h.uploadFormFileWithChunking(c, chunkThreshold)
 		return
 	}
 
 	// 否则使用流式上传方式
-	h.uploadStream(c)
+	h.uploadStreamWithChunking(c, chunkThreshold)
 }
 
-// uploadFormFile 表单文件上传（保持原有逻辑）
-func (h *OSSFileHandler) uploadFormFile(c *gin.Context) {
+// uploadFormFileWithChunking 表单文件上传（智能选择分片）
+func (h *OSSFileHandler) uploadFormFileWithChunking(c *gin.Context, chunkThreshold int64) {
 	// 获取用户ID
 	userID := c.GetUint("userID")
 
@@ -128,7 +142,6 @@ func (h *OSSFileHandler) uploadFormFile(c *gin.Context) {
 	if taskID == "" {
 		taskID = uuid.NewString()
 	}
-	upload.DefaultManager.Start(taskID, file.Size)
 
 	src, err := file.Open()
 	if err != nil {
@@ -137,54 +150,44 @@ func (h *OSSFileHandler) uploadFormFile(c *gin.Context) {
 	}
 	defer src.Close()
 
-	// 使用用户指定的 bucket 上传并监听进度
-	uploadURL, err := storage.UploadToBucketWithProgress(src, objectKey, regionCode, bucketName, func(consumed, total int64) {
-		if total == 0 {
-			total = file.Size
+	// 根据文件大小选择上传方式
+	if file.Size <= chunkThreshold {
+		// 简单上传
+		logger.Info("使用简单上传", zap.Int64("file_size", file.Size), zap.Int64("threshold", chunkThreshold))
+		upload.DefaultManager.Start(taskID, file.Size)
+
+		uploadURL, err := storage.UploadToBucketWithProgress(src, objectKey, regionCode, bucketName, func(consumed, total int64) {
+			if total == 0 {
+				total = file.Size
+			}
+			upload.DefaultManager.Update(taskID, consumed)
+		})
+		if err != nil {
+			h.Error(c, utils.CodeServerError, "上传文件失败")
+			upload.DefaultManager.Finish(taskID)
+			return
 		}
-		upload.DefaultManager.Update(taskID, consumed)
-	})
-	if err != nil {
-		h.Error(c, utils.CodeServerError, "上传文件失败")
 		upload.DefaultManager.Finish(taskID)
-		return
+
+		// 保存文件记录并返回
+		h.saveFileRecord(c, config, objectKey, file.Filename, file.Size, bucketName, uploadURL)
+	} else {
+		// 分片上传
+		logger.Info("使用分片上传", zap.Int64("file_size", file.Size), zap.Int64("threshold", chunkThreshold))
+		uploadURL, err := h.uploadFileWithChunks(c, storage, src, objectKey, regionCode, bucketName, file.Size, taskID, file.Filename)
+		if err != nil {
+			h.Error(c, utils.CodeServerError, err.Error())
+			upload.DefaultManager.Finish(taskID)
+			return
+		}
+
+		// 保存文件记录并返回
+		h.saveFileRecord(c, config, objectKey, file.Filename, file.Size, bucketName, uploadURL)
 	}
-
-	upload.DefaultManager.Finish(taskID)
-
-	// 从配置中获取过期时间，如果未配置则默认为24小时
-	expireTime := config.URLExpireTime
-	if expireTime <= 0 {
-		expireTime = 24 * 3600 // 默认24小时
-	}
-	expiresAt := time.Now().Add(time.Duration(expireTime) * time.Second)
-
-	// 保存文件记录
-	ossFile := models.OSSFile{
-		ConfigID:         config.ID,
-		Filename:         objectKey,
-		OriginalFilename: file.Filename,
-		FileSize:         file.Size,
-		StorageType:      config.StorageType,
-		Bucket:           bucketName,
-		ObjectKey:        objectKey,
-		DownloadURL:      uploadURL,
-		UploaderID:       utils.GetUserID(c),
-		UploadIP:         c.ClientIP(),
-		ExpiresAt:        expiresAt,
-		Status:           "ACTIVE",
-	}
-
-	if err := h.DB.Create(&ossFile).Error; err != nil {
-		h.Error(c, utils.CodeServerError, "保存文件记录失败")
-		return
-	}
-
-	h.Success(c, ossFile)
 }
 
-// uploadStream 流式文件上传
-func (h *OSSFileHandler) uploadStream(c *gin.Context) {
+// uploadStreamWithChunking 流式文件上传（智能选择分片）
+func (h *OSSFileHandler) uploadStreamWithChunking(c *gin.Context, chunkThreshold int64) {
 	// 获取用户ID
 	userID := c.GetUint("userID")
 
@@ -202,19 +205,13 @@ func (h *OSSFileHandler) uploadStream(c *gin.Context) {
 	}
 
 	if originalFilename == "" {
-		h.Error(c, utils.CodeInvalidParams, "请在 X-File-Name 头中指定文件名")
+		h.Error(c, utils.CodeInvalidParams, "请提供文件名（X-File-Name header）")
 		return
 	}
 
-	if contentLengthStr == "" {
-		h.Error(c, utils.CodeInvalidParams, "请求头中缺少 Content-Length")
-		return
-	}
-
-	// 解析文件大小
-	fileSize, err := strconv.ParseInt(contentLengthStr, 10, 64)
-	if err != nil {
-		h.Error(c, utils.CodeInvalidParams, "无效的 Content-Length")
+	contentLength, err := strconv.ParseInt(contentLengthStr, 10, 64)
+	if err != nil || contentLength <= 0 {
+		h.Error(c, utils.CodeInvalidParams, "请提供有效的文件大小（Content-Length header）")
 		return
 	}
 
@@ -243,7 +240,7 @@ func (h *OSSFileHandler) uploadStream(c *gin.Context) {
 	username, _ := c.Get("username")
 	objectKey := utils.GenerateObjectKey(username.(string), ext)
 
-	// 如果客户端提供了上传任务ID，则使用该ID；否则生成新的
+	// 获取任务ID
 	taskID := c.GetHeader("Upload-Task-ID")
 	if taskID == "" {
 		taskID = c.Query("task_id")
@@ -251,23 +248,286 @@ func (h *OSSFileHandler) uploadStream(c *gin.Context) {
 	if taskID == "" {
 		taskID = uuid.NewString()
 	}
-	upload.DefaultManager.Start(taskID, fileSize)
 
-	// 创建进度追踪的Reader，包装请求体
-	progressReader := NewProgressReader(c.Request.Body, fileSize, func(read, total int64) {
-		upload.DefaultManager.Update(taskID, read)
-	})
+	// 根据文件大小选择上传方式
+	if contentLength <= chunkThreshold {
+		// 简单上传
+		logger.Info("使用简单上传", zap.Int64("content_length", contentLength), zap.Int64("threshold", chunkThreshold))
+		upload.DefaultManager.Start(taskID, contentLength)
 
-	// 使用流式的方式上传到指定的bucket
-	uploadURL, err := storage.UploadToBucket(progressReader, objectKey, regionCode, bucketName)
-	if err != nil {
-		h.Error(c, utils.CodeServerError, "上传文件失败")
+		uploadURL, err := storage.UploadToBucketWithProgress(c.Request.Body, objectKey, regionCode, bucketName, func(consumed, total int64) {
+			if total == 0 {
+				total = contentLength
+			}
+			upload.DefaultManager.Update(taskID, consumed)
+		})
+		if err != nil {
+			h.Error(c, utils.CodeServerError, "上传文件失败")
+			upload.DefaultManager.Finish(taskID)
+			return
+		}
 		upload.DefaultManager.Finish(taskID)
-		return
+
+		// 保存文件记录并返回
+		h.saveFileRecord(c, config, objectKey, originalFilename, contentLength, bucketName, uploadURL)
+	} else {
+		// 分片上传
+		logger.Info("使用分片上传", zap.Int64("content_length", contentLength), zap.Int64("threshold", chunkThreshold))
+		uploadURL, err := h.uploadFileWithChunks(c, storage, c.Request.Body, objectKey, regionCode, bucketName, contentLength, taskID, originalFilename)
+		if err != nil {
+			h.Error(c, utils.CodeServerError, err.Error())
+			upload.DefaultManager.Finish(taskID)
+			return
+		}
+
+		// 保存文件记录并返回
+		h.saveFileRecord(c, config, objectKey, originalFilename, contentLength, bucketName, uploadURL)
+	}
+}
+
+// uploadFileWithChunks 分片上传文件
+func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.StorageService, reader io.Reader, objectKey, regionCode, bucketName string, totalSize int64, taskID, originalFilename string) (string, error) {
+	// 默认分片大小：10MB
+	chunkSize := int64(10 * 1024 * 1024)
+	if chunkSizeStr := c.GetHeader("X-Chunk-Size"); chunkSizeStr != "" {
+		if size, err := strconv.ParseInt(chunkSizeStr, 10, 64); err == nil && size > 0 {
+			chunkSize = size
+		}
 	}
 
+	// 计算总分片数
+	totalChunks := int((totalSize + chunkSize - 1) / chunkSize)
+
+	// 初始化分片上传
+	logger.Debug("Initializing multipart upload", zap.String("objectKey", objectKey), zap.String("regionCode", regionCode), zap.String("bucketName", bucketName))
+	uploadID, urls, err := storage.InitMultipartUploadToBucket(objectKey, regionCode, bucketName)
+	if err != nil {
+		return "", fmt.Errorf("初始化分片上传失败: %v", err)
+	}
+
+	logger.Info("开始分片上传",
+		zap.String("task_id", taskID),
+		zap.String("object_key", objectKey),
+		zap.Int64("total_size", totalSize),
+		zap.Int64("chunk_size", chunkSize),
+		zap.Int("total_chunks", totalChunks),
+	)
+
+	// 开始分片上传进度追踪
+	upload.DefaultManager.StartWithChunks(taskID, totalSize, true, totalChunks)
+
+	var parts []oss.Part
+	var uploadedBytes int64
+	partNumber := 1
+
+	// 创建带缓冲的reader，并设置合理的缓冲区大小
+	bufferedReader := bufio.NewReaderSize(reader, int(chunkSize))
+
+	// 设置读取超时时间
+	const readTimeout = 60 * time.Second
+	maxRetries := 3
+
+	for uploadedBytes < totalSize && partNumber <= totalChunks {
+		// 计算当前分片大小
+		currentChunkSize := chunkSize
+		if uploadedBytes+chunkSize > totalSize {
+			currentChunkSize = totalSize - uploadedBytes
+		}
+
+		logger.Debug("准备上传分片",
+			zap.Int("part_number", partNumber),
+			zap.Int64("chunk_size", currentChunkSize),
+			zap.Int64("uploaded_bytes", uploadedBytes),
+		)
+
+		// 读取分片数据，带重试机制
+		var chunkData []byte
+		var readErr error
+
+		for retry := 0; retry < maxRetries; retry++ {
+			if retry > 0 {
+				logger.Warn("重试读取分片数据",
+					zap.Int("part_number", partNumber),
+					zap.Int("retry", retry),
+				)
+				time.Sleep(time.Duration(retry) * time.Second) // 递增延迟
+			}
+
+			chunkData = make([]byte, currentChunkSize)
+
+			// 使用通道和协程实现超时控制
+			done := make(chan error, 1)
+			go func() {
+				_, err := io.ReadFull(bufferedReader, chunkData)
+				done <- err
+			}()
+
+			select {
+			case readErr = <-done:
+				// 读取完成
+				break
+			case <-time.After(readTimeout):
+				readErr = fmt.Errorf("读取分片数据超时")
+				logger.Warn("读取分片数据超时",
+					zap.Int("part_number", partNumber),
+					zap.Duration("timeout", readTimeout),
+				)
+				continue // 重试
+			}
+
+			if readErr == nil || readErr == io.EOF || readErr == io.ErrUnexpectedEOF {
+				break // 成功或预期的EOF
+			}
+		}
+
+		if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+			// 上传失败，中止分片上传（使用正确的方法）
+			h.safeAbortMultipartUpload(storage, uploadID, objectKey, regionCode, bucketName)
+			upload.DefaultManager.Fail(taskID, "读取分片数据失败")
+			return "", fmt.Errorf("读取分片数据失败: %v", readErr)
+		}
+
+		if len(chunkData) == 0 {
+			break
+		}
+
+		// 上传分片
+		var etag string
+		if partNumber <= len(urls) {
+			//logger.Debug("Uploading chunk", zap.Int("partNumber", partNumber), zap.String("chunkDataHash", utils.CalculateMD5Hash(chunkData)))
+			etag, err = h.uploadChunk(storage, urls[partNumber-1], chunkData, partNumber)
+		} else {
+			// 如果URLs不够，使用通用上传方法
+			//logger.Debug("Uploading generic chunk", zap.Int("partNumber", partNumber), zap.String("chunkDataHash", utils.CalculateMD5Hash(chunkData)))
+			etag, err = h.uploadChunkGeneric(storage, chunkData, partNumber, uploadID, objectKey)
+		}
+
+		if err != nil {
+			// 上传失败，中止分片上传（使用正确的方法）
+			h.safeAbortMultipartUpload(storage, uploadID, objectKey, regionCode, bucketName)
+			upload.DefaultManager.Fail(taskID, fmt.Sprintf("上传分片 %d 失败", partNumber))
+			return "", fmt.Errorf("上传分片 %d 失败: %v", partNumber, err)
+		}
+
+		parts = append(parts, oss.Part{
+			PartNumber: partNumber,
+			ETag:       etag,
+		})
+
+		uploadedBytes += int64(len(chunkData))
+		partNumber++
+
+		// 更新分片进度
+		upload.DefaultManager.UpdateChunk(taskID, partNumber-1, true)
+
+		logger.Debug("分片上传成功",
+			zap.Int("part_number", partNumber-1),
+			zap.String("etag", etag),
+			zap.Int64("uploaded_bytes", uploadedBytes),
+		)
+	}
+
+	logger.Info("所有分片上传完成，开始合并",
+		zap.String("upload_id", uploadID),
+		zap.Int("total_parts", len(parts)),
+	)
+
+	// 完成分片上传
+	uploadURL, err := storage.CompleteMultipartUploadToBucket(objectKey, uploadID, parts, regionCode, bucketName)
+	if err != nil {
+		// 完成失败，中止分片上传（使用正确的方法）
+		h.safeAbortMultipartUpload(storage, uploadID, objectKey, regionCode, bucketName)
+		upload.DefaultManager.Fail(taskID, "完成分片上传失败")
+		return "", fmt.Errorf("完成分片上传失败: %v", err)
+	}
+
+	// 完成进度追踪
 	upload.DefaultManager.Finish(taskID)
 
+	logger.Info("分片上传完全成功",
+		zap.String("task_id", taskID),
+		zap.String("upload_url", uploadURL),
+	)
+
+	return uploadURL, nil
+}
+
+// safeAbortMultipartUpload 安全地中止分片上传，不会因为错误而阻塞主流程
+func (h *OSSFileHandler) safeAbortMultipartUpload(storage oss.StorageService, uploadID, objectKey, regionCode, bucketName string) {
+	// 使用类型断言检查是否为阿里云存储服务
+	if aliyunStorage, ok := storage.(*oss.AliyunOSSService); ok {
+		// 使用新的AbortMultipartUploadToBucket方法
+		err := aliyunStorage.AbortMultipartUploadToBucket(uploadID, objectKey, regionCode, bucketName)
+		if err != nil {
+			logger.Warn("中止分片上传失败，但继续处理",
+				zap.String("upload_id", uploadID),
+				zap.String("object_key", objectKey),
+				zap.Error(err),
+			)
+		}
+	} else {
+		// 其他存储服务使用原来的方法
+		err := storage.AbortMultipartUpload(uploadID, objectKey)
+		if err != nil {
+			logger.Warn("中止分片上传失败，但继续处理",
+				zap.String("upload_id", uploadID),
+				zap.String("object_key", objectKey),
+				zap.Error(err),
+			)
+		}
+	}
+}
+
+// uploadChunkGeneric 通用分片上传方法（当预签名URL不可用时）
+func (h *OSSFileHandler) uploadChunkGeneric(storage oss.StorageService, data []byte, partNumber int, uploadID, objectKey string) (string, error) {
+	// 这里需要实现针对具体存储服务的分片上传逻辑
+	// 由于每个云服务商的API不同，这里只是一个占位符
+	// 实际实现需要调用storage service的具体分片上传方法
+	return "", fmt.Errorf("通用分片上传方法未实现")
+}
+
+// uploadChunk 上传单个分片
+func (h *OSSFileHandler) uploadChunk(storage oss.StorageService, uploadURL string, data []byte, partNumber int) (string, error) {
+	// 这里需要根据具体的存储服务实现分片上传
+	// 由于不同的云服务商有不同的分片上传API，这里提供一个通用的HTTP PUT方法
+
+	req, err := http.NewRequest("PUT", uploadURL, bytes.NewReader(data))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("Content-Length", strconv.Itoa(len(data)))
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("上传分片失败，状态码: %d, 响应: %s", resp.StatusCode, string(body))
+	}
+
+	// 获取ETag
+	etag := resp.Header.Get("ETag")
+	if etag == "" {
+		return "", fmt.Errorf("无法获取分片ETag")
+	}
+
+	// 移除ETag中的引号
+	etag = strings.Trim(etag, "\"")
+
+	return etag, nil
+}
+
+// saveFileRecord 保存文件记录
+func (h *OSSFileHandler) saveFileRecord(c *gin.Context, config models.OSSConfig, objectKey, originalFilename string, fileSize int64, bucketName, uploadURL string) {
 	// 从配置中获取过期时间，如果未配置则默认为24小时
 	expireTime := config.URLExpireTime
 	if expireTime <= 0 {
@@ -351,11 +611,14 @@ func (h *OSSFileHandler) InitMultipartUpload(c *gin.Context) {
 // CompleteMultipartUpload 完成分片上传
 func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 	var req struct {
-		RegionCode string   `json:"region_code" binding:"required"`
-		BucketName string   `json:"bucket_name" binding:"required"`
-		ObjectKey  string   `json:"object_key" binding:"required"`
-		UploadID   string   `json:"upload_id" binding:"required"`
-		Parts      []string `json:"parts" binding:"required"`
+		RegionCode       string   `json:"region_code" binding:"required"`
+		BucketName       string   `json:"bucket_name" binding:"required"`
+		ObjectKey        string   `json:"object_key" binding:"required"`
+		UploadID         string   `json:"upload_id" binding:"required"`
+		Parts            []string `json:"parts" binding:"required"`
+		OriginalFilename string   `json:"original_filename"`
+		FileSize         int64    `json:"file_size"`
+		TaskID           string   `json:"task_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -391,34 +654,68 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 		}
 	}
 
+	logger.Info("开始完成分片上传",
+		zap.String("upload_id", req.UploadID),
+		zap.String("object_key", req.ObjectKey),
+		zap.Int("parts_count", len(ossParts)),
+		zap.String("task_id", req.TaskID),
+	)
+
 	// 完成分片上传
 	url, err := storage.CompleteMultipartUploadToBucket(req.ObjectKey, req.UploadID, ossParts, req.RegionCode, req.BucketName)
 	if err != nil {
+		if req.TaskID != "" {
+			upload.DefaultManager.Fail(req.TaskID, "完成分片上传失败")
+		}
 		h.Error(c, utils.CodeServerError, "完成分片上传失败")
 		return
 	}
+
+	// 设置默认值
+	originalFilename := req.OriginalFilename
+	if originalFilename == "" {
+		originalFilename = req.ObjectKey
+	}
+
+	// 从配置中获取过期时间，如果未配置则默认为24小时
+	expireTime := config.URLExpireTime
+	if expireTime <= 0 {
+		expireTime = 24 * 3600 // 默认24小时
+	}
+	expiresAt := time.Now().Add(time.Duration(expireTime) * time.Second)
 
 	// 保存文件记录
 	ossFile := models.OSSFile{
 		ConfigID:         config.ID,
 		Filename:         req.ObjectKey,
-		OriginalFilename: req.ObjectKey, // 这里可能需要前端传入原始文件名
+		OriginalFilename: originalFilename,
+		FileSize:         req.FileSize,
 		StorageType:      config.StorageType,
 		Bucket:           req.BucketName,
 		ObjectKey:        req.ObjectKey,
 		DownloadURL:      url,
 		UploaderID:       utils.GetUserID(c),
 		UploadIP:         c.ClientIP(),
+		ExpiresAt:        expiresAt,
 		Status:           "ACTIVE",
 	}
 
 	if err := h.DB.Create(&ossFile).Error; err != nil {
+		logger.Error("保存文件记录失败", zap.Error(err))
 		h.Error(c, utils.CodeServerError, "保存文件记录失败")
 		return
 	}
 
-	// 上传成功后，触发MD5计算
-	//go h.triggerMD5Calculation(ossFile.ID)
+	// 完成进度追踪
+	if req.TaskID != "" {
+		upload.DefaultManager.Finish(req.TaskID)
+	}
+
+	logger.Info("分片上传完全完成",
+		zap.String("task_id", req.TaskID),
+		zap.Uint("file_id", ossFile.ID),
+		zap.String("download_url", url),
+	)
 
 	h.Success(c, ossFile)
 }
