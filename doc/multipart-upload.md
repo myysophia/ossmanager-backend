@@ -41,7 +41,7 @@
 ### 强健的错误处理
 
 - **失败重试**: 单个分片失败时自动重试
-- **状态恢复**: 支持断点续传（规划中）
+- **状态恢复**: 通过 `X-Upload-Id` 头部支持断点续传
 - **资源清理**: 失败时自动清理临时资源
 
 ## 🔧 API接口
@@ -74,6 +74,8 @@ Content-Length: 157286400
 X-Chunk-Threshold: 104857600
 X-Chunk-Size: 10485760
 Upload-Task-ID: <uuid>
+X-Upload-Id: <upload_id>      # 可选，用于断点续传
+X-Object-Key: <object_key>    # 与 X-Upload-Id 一同使用
 
 <binary_data>
 ```

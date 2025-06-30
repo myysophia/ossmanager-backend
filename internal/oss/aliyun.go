@@ -240,7 +240,7 @@ func (s *AliyunOSSService) AbortMultipartUploadToBucket(uploadID string, objectK
 }
 
 // ListUploadedPartsToBucket 获取已上传的分片列表
-func (s *AliyunOSSService) ListUploadedPartsToBucket(objectKey string, uploadID string, regionCode string, bucketName string) ([]int, error) {
+func (s *AliyunOSSService) ListUploadedPartsToBucket(objectKey string, uploadID string, regionCode string, bucketName string) ([]Part, error) {
 	// 获取正确的endpoint（考虑传输加速）
 	endpoint := s.getEndpoint(regionCode)
 
@@ -254,7 +254,7 @@ func (s *AliyunOSSService) ListUploadedPartsToBucket(objectKey string, uploadID 
 		return nil, fmt.Errorf("获取存储桶失败: %w", err)
 	}
 
-	var uploadedParts []int
+	var uploadedParts []Part
 	marker := 0
 	for {
 		result, err := bucket.ListUploadedParts(oss.InitiateMultipartUploadResult{
@@ -266,7 +266,10 @@ func (s *AliyunOSSService) ListUploadedPartsToBucket(objectKey string, uploadID 
 		}
 
 		for _, part := range result.UploadedParts {
-			uploadedParts = append(uploadedParts, part.PartNumber)
+			uploadedParts = append(uploadedParts, Part{
+				PartNumber: part.PartNumber,
+				ETag:       strings.Trim(part.ETag, "\""),
+			})
 		}
 
 		if !result.IsTruncated {
@@ -276,8 +279,34 @@ func (s *AliyunOSSService) ListUploadedPartsToBucket(objectKey string, uploadID 
 		marker = next
 	}
 
-	sort.Ints(uploadedParts)
+	sort.Slice(uploadedParts, func(i, j int) bool { return uploadedParts[i].PartNumber < uploadedParts[j].PartNumber })
 	return uploadedParts, nil
+}
+
+// GeneratePartUploadURL 生成单个分片上传的预签名URL
+func (s *AliyunOSSService) GeneratePartUploadURL(objectKey string, uploadID string, partNumber int, regionCode string, bucketName string) (string, error) {
+	endpoint := s.getEndpoint(regionCode)
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		return "", fmt.Errorf("创建OSS客户端失败: %w", err)
+	}
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return "", fmt.Errorf("获取存储桶失败: %w", err)
+	}
+
+	options := []oss.Option{
+		oss.AddParam("uploadId", uploadID),
+		oss.AddParam("partNumber", strconv.Itoa(partNumber)),
+		oss.ContentType("application/octet-stream"),
+	}
+
+	url, err := bucket.SignURL(objectKey, oss.HTTPPut, 3600, options...)
+	if err != nil {
+		return "", fmt.Errorf("生成分片上传URL失败: %w", err)
+	}
+
+	return url, nil
 }
 
 // GenerateDownloadURL 生成下载URL

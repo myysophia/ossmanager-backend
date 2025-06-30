@@ -61,8 +61,11 @@ type StorageService interface {
 	// objectKey: 对象键
 	// uploadID: 上传ID
 	// regionCode, bucketName: 指定的地域和存储桶
-	// 返回：已上传的分片编号列表, 错误
-	ListUploadedPartsToBucket(objectKey string, uploadID string, regionCode string, bucketName string) ([]int, error)
+	// 返回：已上传的分片信息列表, 错误
+	ListUploadedPartsToBucket(objectKey string, uploadID string, regionCode string, bucketName string) ([]Part, error)
+
+	// GeneratePartUploadURL 生成单个分片上传的预签名URL
+	GeneratePartUploadURL(objectKey string, uploadID string, partNumber int, regionCode string, bucketName string) (string, error)
 
 	// GenerateDownloadURL 生成下载URL
 	// objectKey: 对象键

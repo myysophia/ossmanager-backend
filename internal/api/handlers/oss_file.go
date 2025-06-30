@@ -298,11 +298,27 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 	// 计算总分片数
 	totalChunks := int((totalSize + chunkSize - 1) / chunkSize)
 
-	// 初始化分片上传
+	resumeUploadID := c.GetHeader("X-Upload-Id")
+	if resumeUploadID == "" {
+		resumeUploadID = c.Query("upload_id")
+	}
+	if resumeUploadID != "" {
+		objectKey = c.GetHeader("X-Object-Key")
+		if objectKey == "" {
+			objectKey = c.Query("object_key")
+		}
+	}
+
+	var uploadID string
 	logger.Debug("Initializing multipart upload", zap.String("objectKey", objectKey), zap.String("regionCode", regionCode), zap.String("bucketName", bucketName))
-	uploadID, urls, err := storage.InitMultipartUploadToBucket(objectKey, regionCode, bucketName)
-	if err != nil {
-		return "", fmt.Errorf("初始化分片上传失败: %v", err)
+	var err error
+	if resumeUploadID == "" {
+		uploadID, _, err = storage.InitMultipartUploadToBucket(objectKey, regionCode, bucketName)
+		if err != nil {
+			return "", fmt.Errorf("初始化分片上传失败: %v", err)
+		}
+	} else {
+		uploadID = resumeUploadID
 	}
 
 	logger.Info("开始分片上传",
@@ -322,6 +338,28 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 
 	// 创建带缓冲的reader，并设置合理的缓冲区大小
 	bufferedReader := bufio.NewReaderSize(reader, int(chunkSize))
+
+	if resumeUploadID != "" {
+		existing, err := storage.ListUploadedPartsToBucket(objectKey, uploadID, regionCode, bucketName)
+		if err == nil && len(existing) > 0 {
+			logger.Info("继续未完成的分片上传", zap.Int("existing_parts", len(existing)))
+			for _, p := range existing {
+				if p.PartNumber != partNumber {
+					break
+				}
+				parts = append(parts, p)
+				size := chunkSize
+				if p.PartNumber == totalChunks {
+					size = totalSize - int64(totalChunks-1)*chunkSize
+				}
+				if _, err := io.CopyN(io.Discard, bufferedReader, size); err != nil {
+					return "", fmt.Errorf("跳过已上传分片失败: %v", err)
+				}
+				uploadedBytes += size
+				partNumber++
+			}
+		}
+	}
 
 	// 设置读取超时时间
 	const readTimeout = 60 * time.Second
@@ -391,14 +429,12 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 
 		// 上传分片
 		var etag string
-		if partNumber <= len(urls) {
-			//logger.Debug("Uploading chunk", zap.Int("partNumber", partNumber), zap.String("chunkDataHash", utils.CalculateMD5Hash(chunkData)))
-			etag, err = h.uploadChunk(storage, urls[partNumber-1], chunkData, partNumber)
-		} else {
-			// 如果URLs不够，使用通用上传方法
-			//logger.Debug("Uploading generic chunk", zap.Int("partNumber", partNumber), zap.String("chunkDataHash", utils.CalculateMD5Hash(chunkData)))
-			etag, err = h.uploadChunkGeneric(storage, chunkData, partNumber, uploadID, objectKey)
+		uploadURL, err := storage.GeneratePartUploadURL(objectKey, uploadID, partNumber, regionCode, bucketName)
+		if err != nil {
+			upload.DefaultManager.Fail(taskID, fmt.Sprintf("获取分片 %d 上传URL失败", partNumber))
+			return "", fmt.Errorf("获取分片 %d 上传URL失败: %v", partNumber, err)
 		}
+		etag, err = h.uploadChunk(storage, uploadURL, chunkData, partNumber)
 
 		if err != nil {
 			upload.DefaultManager.Fail(taskID, fmt.Sprintf("上传分片 %d 失败", partNumber))
@@ -802,13 +838,18 @@ func (h *OSSFileHandler) ListUploadedParts(c *gin.Context) {
 		return
 	}
 
-	parts, err := storage.ListUploadedPartsToBucket(objectKey, uploadID, regionCode, bucketName)
+	uploadedParts, err := storage.ListUploadedPartsToBucket(objectKey, uploadID, regionCode, bucketName)
 	if err != nil {
 		h.Error(c, utils.CodeServerError, "获取已上传分片失败")
 		return
 	}
 
-	h.Success(c, gin.H{"parts": parts})
+	partNumbers := make([]int, len(uploadedParts))
+	for i, p := range uploadedParts {
+		partNumbers[i] = p.PartNumber
+	}
+
+	h.Success(c, gin.H{"parts": partNumbers})
 }
 
 // List 获取文件列表，相同文件名只获取最新一个
