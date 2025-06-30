@@ -517,6 +517,11 @@ func (s *AliyunOSSService) InitMultipartUploadToBucket(objectKey string, regionC
 		options := []oss.Option{
 			oss.AddParam("uploadId", result.UploadID),
 			oss.AddParam("partNumber", strconv.Itoa(i)),
+			// The Content-Type header must be included in the
+			// signature, otherwise OSS will report
+			// "SignatureDoesNotMatch" when the client sets this
+			// header during upload.
+			oss.ContentType("application/octet-stream"),
 		}
 		url, err := bucket.SignURL(objectKey, oss.HTTPPut, 3600, options...)
 		if err != nil {

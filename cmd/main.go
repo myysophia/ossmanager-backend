@@ -57,14 +57,24 @@ func main() {
 	router := api.SetupRouter(storageFactory, md5Calculator, db.GetDB())
 
 	// 创建HTTP服务器 - 禁用HTTP/2以确保SSE连接稳定性
+	// 根据配置计算超时时间，若未配置则使用默认值 30 秒
+	readTimeout := time.Duration(cfg.App.ReadTimeout) * time.Second
+	if readTimeout <= 0 {
+		readTimeout = 30 * time.Second
+	}
+	writeTimeout := time.Duration(cfg.App.WriteTimeout) * time.Second
+	if writeTimeout <= 0 {
+		writeTimeout = 30 * time.Second
+	}
+
 	server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.App.Host, cfg.App.Port),
 		Handler: router,
 		// 禁用HTTP/2，强制使用HTTP/1.1
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 		// 设置超时时间，优化长连接
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
 		IdleTimeout:       60 * time.Second,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
