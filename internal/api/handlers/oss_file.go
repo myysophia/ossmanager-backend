@@ -361,8 +361,14 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 		}
 	}
 
-	// 设置读取超时时间
-	const readTimeout = 60 * time.Second
+	// 读取分片超时时间，可通过头部 X-Chunk-Read-Timeout 调整，默认 5 分钟
+	readTimeout := 5 * time.Minute
+	if timeoutStr := c.GetHeader("X-Chunk-Read-Timeout"); timeoutStr != "" {
+		if t, err := strconv.Atoi(timeoutStr); err == nil && t > 0 {
+			readTimeout = time.Duration(t) * time.Second
+		}
+	}
+
 	maxRetries := 3
 
 	for uploadedBytes < totalSize && partNumber <= totalChunks {
