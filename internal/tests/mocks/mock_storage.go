@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+
+	"github.com/myysophia/ossmanager-backend/internal/oss"
 )
 
 // MockStorageService 模拟存储服务
@@ -70,6 +72,21 @@ func (m *MockStorageService) CompleteMultipartUpload(uploadID string, parts []in
 func (m *MockStorageService) AbortMultipartUpload(uploadID string, objectKey string) error {
 	args := m.Called(uploadID, objectKey)
 	return args.Error(0)
+}
+
+func (m *MockStorageService) AbortMultipartUploadToBucket(uploadID string, objectKey string, regionCode string, bucketName string) error {
+	args := m.Called(uploadID, objectKey, regionCode, bucketName)
+	return args.Error(0)
+}
+
+func (m *MockStorageService) ListUploadedPartsToBucket(objectKey string, uploadID string, regionCode string, bucketName string) ([]oss.Part, error) {
+	args := m.Called(objectKey, uploadID, regionCode, bucketName)
+	return args.Get(0).([]oss.Part), args.Error(1)
+}
+
+func (m *MockStorageService) GeneratePartUploadURL(objectKey string, uploadID string, partNumber int, regionCode string, bucketName string) (string, error) {
+	args := m.Called(objectKey, uploadID, partNumber, regionCode, bucketName)
+	return args.String(0), args.Error(1)
 }
 
 // MockStorageFactory 模拟存储工厂

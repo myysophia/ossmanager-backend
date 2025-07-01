@@ -41,7 +41,7 @@
 ### 强健的错误处理
 
 - **失败重试**: 单个分片失败时自动重试
-- **状态恢复**: 支持断点续传（规划中）
+- **状态恢复**: 通过 `X-Upload-Id` 头部支持断点续传
 - **资源清理**: 失败时自动清理临时资源
 
 ## 🔧 API接口
@@ -57,6 +57,7 @@ region_code: cn-hangzhou
 bucket_name: test-bucket
 X-Chunk-Threshold: 104857600  # 分片阈值(字节)，默认100MB
 X-Chunk-Size: 10485760        # 分片大小(字节)，默认10MB
+X-Chunk-Concurrency: 3        # 并发上传分片数，可选
 Upload-Task-ID: <uuid>        # 可选，用于进度追踪
 
 file: <binary_data>
@@ -73,7 +74,10 @@ X-File-Name: example.zip
 Content-Length: 157286400
 X-Chunk-Threshold: 104857600
 X-Chunk-Size: 10485760
+X-Chunk-Concurrency: 3
 Upload-Task-ID: <uuid>
+X-Upload-Id: <upload_id>      # 可选，用于断点续传
+X-Object-Key: <object_key>    # 与 X-Upload-Id 一同使用
 
 <binary_data>
 ```
@@ -137,6 +141,22 @@ Authorization: Bearer <token>
     "config_id": "config-id-123",
     "object_key": "user123/20231215/abc123.zip",
     "upload_id": "upload-id-123"
+}
+```
+
+#### 查询已上传分片
+```http
+GET /api/v1/oss/multipart/parts?region_code=cn-hangzhou&bucket_name=test-bucket&object_key=user123/20231215/abc123.zip&upload_id=upload-id-123
+Authorization: Bearer <token>
+```
+
+**响应:**
+```json
+{
+    "success": true,
+    "data": {
+        "parts": [1, 2, 3]
+    }
 }
 ```
 
@@ -249,6 +269,7 @@ graph TD
 |------|------|--------|------|
 | `X-Chunk-Threshold` | int64 | 104857600 (100MB) | 分片上传阈值 |
 | `X-Chunk-Size` | int64 | 10485760 (10MB) | 分片大小 |
+| `X-Chunk-Concurrency` | int | 配置值或1 | 并发上传的分片数 |
 | `Upload-Task-ID` | string | auto-generated | 任务ID，用于进度追踪 |
 
 ### 系统配置
@@ -257,7 +278,7 @@ graph TD
 |--------|--------|------|
 | Progress cleanup delay | 5秒 | 进度信息保留时间 |
 | Upload timeout | 30秒/分片 | 单个分片上传超时 |
-| Max concurrent uploads | unlimited | 最大并发上传数 |
+| Max concurrent uploads | 配置值或1 | 最大并发上传数 |
 
 ## 🧪 测试方法
 
@@ -329,7 +350,7 @@ graph TD
 
 ### 并发控制
 
-- 分片上传采用串行方式，避免带宽竞争
+- 分片上传支持并发，可通过 `chunk_concurrency` 配置或 `X-Chunk-Concurrency` 头设置并发数
 - 进度通知使用非阻塞channel，防止阻塞上传
 - 适时的垃圾回收，防止内存泄漏
 
