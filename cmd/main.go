@@ -26,7 +26,6 @@ func main() {
 		env = "dev" // 默认开发环境
 	}
 	cfg, err := config.LoadConfigWithEnv("configs", env)
-
 	if err != nil {
 		panic(fmt.Sprintf("加载配置失败: %v", err))
 	}
@@ -56,11 +55,9 @@ func main() {
 	// 设置路由
 	router := api.SetupRouter(storageFactory, md5Calculator, db.GetDB())
 
-	// 创建HTTP服务器 - 禁用HTTP/2以确保SSE连接稳定性
-	// 根据配置计算超时时间，若未配置则使用默认值 30 秒
+	// 根据配置设置超时
 	readTimeout := time.Duration(cfg.App.ReadTimeout) * time.Second
 	if cfg.App.ReadTimeout <= 0 {
-		// 0 表示不设置超时，由配置决定是否限制
 		readTimeout = 0
 	}
 	writeTimeout := time.Duration(cfg.App.WriteTimeout) * time.Second
@@ -71,15 +68,23 @@ func main() {
 	if cfg.App.IdleTimeout <= 0 {
 		idleTimeout = 0
 	}
+
+	// 创建 HTTP 服务器，禁用 HTTP/2 以确保 SSE 兼容性
+	server := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.App.Port),
+		Handler:           router,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
 		ReadHeaderTimeout: 10 * time.Second,
+		TLSConfig:         &tls.Config{NextProtos: []string{"http/1.1"}}, // 禁用 HTTP/2
 	}
 
-	// 优雅关闭服务器
+	// 优雅关闭：监听终止信号
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	// 启动HTTP服务器
+	// 启动 HTTP 服务
 	go func() {
 		logger.Info("HTTP服务器启动成功", zap.String("addr", server.Addr))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -91,15 +96,15 @@ func main() {
 	<-quit
 	logger.Info("正在关闭服务器...")
 
-	// 关闭MD5计算器
+	// 停止 MD5 计算器
 	md5Calculator.Stop()
 	logger.Info("MD5计算器已关闭")
 
-	// 设置关闭超时时间
+	// 设置 5 秒关闭超时
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// 关闭HTTP服务器
+	// 关闭 HTTP 服务器
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Fatal("服务器关闭异常", zap.Error(err))
 	}
