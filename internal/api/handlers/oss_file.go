@@ -384,7 +384,7 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 		}
 	}
 
-	maxRetries := 3
+	maxRetries := 10
 
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
