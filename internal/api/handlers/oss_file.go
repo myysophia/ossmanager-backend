@@ -391,11 +391,6 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 	var mu sync.Mutex
 	errCh := make(chan error, 1)
 
-	sem := make(chan struct{}, concurrency)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	errCh := make(chan error, 1)
-
 	for uploadedBytes < totalSize && partNumber <= totalChunks {
 		if len(errCh) > 0 {
 			break
