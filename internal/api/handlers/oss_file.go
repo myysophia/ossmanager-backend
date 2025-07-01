@@ -384,7 +384,12 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 		}
 	}
 
-	maxRetries := 3
+	maxRetries := 10
+
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	errCh := make(chan error, 1)
 
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
@@ -461,7 +466,6 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 			zap.Int("part_number", partNumber),
 			zap.Duration("elapsed", time.Since(readStart)),
 		)
-
 		// 上传分片
 		curPart := partNumber
 		dataCopy := make([]byte, len(chunkData))
@@ -475,6 +479,7 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 			defer wg.Done()
 			defer func() { <-sem }()
 			urlStart := time.Now()
+
 			uploadURL, err := storage.GeneratePartUploadURL(objectKey, uploadID, curPart, regionCode, bucketName)
 			if err != nil {
 				select {
@@ -625,7 +630,6 @@ func (h *OSSFileHandler) uploadChunk(storage oss.StorageService, uploadURL strin
 			lastErr = fmt.Errorf("无法获取分片ETag")
 			continue
 		}
-
 		// 移除ETag中的引号
 		etag = strings.Trim(etag, "\"")
 

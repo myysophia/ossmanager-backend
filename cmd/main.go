@@ -71,15 +71,6 @@ func main() {
 	if cfg.App.IdleTimeout <= 0 {
 		idleTimeout = 0
 	}
-
-	server := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", cfg.App.Host, cfg.App.Port),
-		Handler: router,
-		// 禁用HTTP/2，强制使用HTTP/1.1
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
-		// 设置超时时间，优化长连接
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
