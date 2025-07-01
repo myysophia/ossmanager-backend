@@ -7,8 +7,10 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +18,7 @@ import (
 	"github.com/myysophia/ossmanager-backend/internal/logger"
 
 	"github.com/gin-gonic/gin"
+	"github.com/myysophia/ossmanager-backend/internal/config"
 	"github.com/myysophia/ossmanager-backend/internal/db/models"
 	"github.com/myysophia/ossmanager-backend/internal/oss"
 	"github.com/myysophia/ossmanager-backend/internal/upload"
@@ -295,6 +298,18 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 		}
 	}
 
+	// 并发量，默认为配置值或1
+	concurrency := 1
+	cfg := config.GetConfig()
+	if cfg != nil && cfg.App.ChunkConcurrency > 0 {
+		concurrency = cfg.App.ChunkConcurrency
+	}
+	if concStr := c.GetHeader("X-Chunk-Concurrency"); concStr != "" {
+		if cc, err := strconv.Atoi(concStr); err == nil && cc > 0 {
+			concurrency = cc
+		}
+	}
+
 	// 计算总分片数
 	totalChunks := int((totalSize + chunkSize - 1) / chunkSize)
 
@@ -371,7 +386,15 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 
 	maxRetries := 3
 
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	errCh := make(chan error, 1)
+
 	for uploadedBytes < totalSize && partNumber <= totalChunks {
+		if len(errCh) > 0 {
+			break
+		}
 		// 计算当前分片大小
 		currentChunkSize := chunkSize
 		if uploadedBytes+chunkSize > totalSize {
@@ -434,36 +457,52 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 		}
 
 		// 上传分片
-		var etag string
-		uploadURL, err := storage.GeneratePartUploadURL(objectKey, uploadID, partNumber, regionCode, bucketName)
-		if err != nil {
-			upload.DefaultManager.Fail(taskID, fmt.Sprintf("获取分片 %d 上传URL失败", partNumber))
-			return "", fmt.Errorf("获取分片 %d 上传URL失败: %v", partNumber, err)
-		}
-		etag, err = h.uploadChunk(storage, uploadURL, chunkData, partNumber)
-
-		if err != nil {
-			upload.DefaultManager.Fail(taskID, fmt.Sprintf("上传分片 %d 失败", partNumber))
-			return "", fmt.Errorf("上传分片 %d 失败: %v", partNumber, err)
-		}
-
-		parts = append(parts, oss.Part{
-			PartNumber: partNumber,
-			ETag:       etag,
-		})
-
+		curPart := partNumber
+		dataCopy := make([]byte, len(chunkData))
+		copy(dataCopy, chunkData)
 		uploadedBytes += int64(len(chunkData))
 		partNumber++
 
-		// 更新分片进度
-		upload.DefaultManager.UpdateChunk(taskID, partNumber-1, true)
-
-		logger.Debug("分片上传成功",
-			zap.Int("part_number", partNumber-1),
-			zap.String("etag", etag),
-			zap.Int64("uploaded_bytes", uploadedBytes),
-		)
+		sem <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			uploadURL, err := storage.GeneratePartUploadURL(objectKey, uploadID, curPart, regionCode, bucketName)
+			if err != nil {
+				select {
+				case errCh <- fmt.Errorf("获取分片 %d 上传URL失败: %v", curPart, err):
+				default:
+				}
+				return
+			}
+			etag, err := h.uploadChunk(storage, uploadURL, dataCopy, curPart)
+			if err != nil {
+				select {
+				case errCh <- fmt.Errorf("上传分片 %d 失败: %v", curPart, err):
+				default:
+				}
+				return
+			}
+			mu.Lock()
+			parts = append(parts, oss.Part{PartNumber: curPart, ETag: etag})
+			mu.Unlock()
+			upload.DefaultManager.UpdateChunk(taskID, curPart, true)
+			logger.Debug("分片上传成功",
+				zap.Int("part_number", curPart),
+				zap.String("etag", etag),
+			)
+		}()
 	}
+
+	wg.Wait()
+	if len(errCh) > 0 {
+		h.safeAbortMultipartUpload(storage, uploadID, objectKey, regionCode, bucketName)
+		upload.DefaultManager.Fail(taskID, (<-errCh).Error())
+		return "", fmt.Errorf("%v", <-errCh)
+	}
+
+	sort.Slice(parts, func(i, j int) bool { return parts[i].PartNumber < parts[j].PartNumber })
 
 	logger.Info("所有分片上传完成，开始合并",
 		zap.String("upload_id", uploadID),
