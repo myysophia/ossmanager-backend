@@ -350,9 +350,11 @@ func (h *OSSFileHandler) uploadFileWithChunks(c *gin.Context, storage oss.Storag
 	var parts []oss.Part
 	var uploadedBytes int64
 	partNumber := 1
-
+	// 包装请求体以在读取过程中实时更新上传进度
+	progressReader := upload.NewReader(taskID, reader)
 	// 创建带缓冲的reader，并设置合理的缓冲区大小
-	bufferedReader := bufio.NewReaderSize(reader, int(chunkSize))
+	//bufferedReader := bufio.NewReaderSize(reader, int(chunkSize))
+	bufferedReader := bufio.NewReaderSize(progressReader, int(chunkSize))
 
 	if resumeUploadID != "" {
 		existing, err := storage.ListUploadedPartsToBucket(objectKey, uploadID, regionCode, bucketName)
