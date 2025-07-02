@@ -983,6 +983,16 @@ func (h *OSSFileHandler) List(c *gin.Context) {
 	})
 }
 
+// getRegionByBucket 通过存储桶名称获取区域代码
+func (h *OSSFileHandler) getRegionByBucket(bucketName string) (string, error) {
+	var mapping models.RegionBucketMapping
+	err := h.DB.Where("bucket_name = ?", bucketName).First(&mapping).Error
+	if err != nil {
+		return "", fmt.Errorf("未找到存储桶 %s 对应的区域信息: %w", bucketName, err)
+	}
+	return mapping.RegionCode, nil
+}
+
 // Delete 删除文件
 func (h *OSSFileHandler) Delete(c *gin.Context) {
 	// 获取用户ID
@@ -995,15 +1005,25 @@ func (h *OSSFileHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// 获取配置信息以获取Region
+	// 通过存储桶名称获取区域信息
+	regionCode, err := h.getRegionByBucket(file.Bucket)
+	if err != nil {
+		logger.Error("获取存储桶区域信息失败",
+			zap.String("bucket", file.Bucket),
+			zap.Error(err))
+		h.Error(c, utils.CodeServerError, "获取存储桶区域信息失败")
+		return
+	}
+
+	// 获取配置信息
 	var config models.OSSConfig
 	if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
 		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
 		return
 	}
 
-	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, userID, file.DownloadURL, file.Bucket) {
+	// 检查用户是否有权限访问该桶（使用获取到的区域和存储桶）
+	if !auth.CheckBucketAccess(h.DB, userID, regionCode, file.Bucket) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}
@@ -1014,7 +1034,13 @@ func (h *OSSFileHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := storage.DeleteObject(file.ObjectKey); err != nil {
+	// 使用获取到的区域和存储桶信息删除文件
+	if err := storage.DeleteObjectFromBucket(file.ObjectKey, regionCode, file.Bucket); err != nil {
+		logger.Error("删除文件失败",
+			zap.String("objectKey", file.ObjectKey),
+			zap.String("region", regionCode),
+			zap.String("bucket", file.Bucket),
+			zap.Error(err))
 		h.Error(c, utils.CodeServerError, "删除文件失败")
 		return
 	}
@@ -1023,6 +1049,12 @@ func (h *OSSFileHandler) Delete(c *gin.Context) {
 		h.Error(c, utils.CodeServerError, "删除文件记录失败")
 		return
 	}
+
+	logger.Info("文件删除成功",
+		zap.Uint("fileID", file.ID),
+		zap.String("objectKey", file.ObjectKey),
+		zap.String("region", regionCode),
+		zap.String("bucket", file.Bucket))
 
 	h.Success(c, nil)
 }
@@ -1037,15 +1069,25 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 		return
 	}
 
-	// 获取配置信息以获取Region
+	// 通过存储桶名称获取区域信息
+	regionCode, err := h.getRegionByBucket(file.Bucket)
+	if err != nil {
+		logger.Error("获取存储桶区域信息失败",
+			zap.String("bucket", file.Bucket),
+			zap.Error(err))
+		h.Error(c, utils.CodeServerError, "获取存储桶区域信息失败")
+		return
+	}
+
+	// 获取配置信息
 	var config models.OSSConfig
 	if err := h.DB.First(&config, file.ConfigID).Error; err != nil {
 		h.Error(c, utils.CodeConfigNotFound, "存储配置不存在")
 		return
 	}
 
-	// 检查用户是否有权限访问该桶
-	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), file.DownloadURL, file.Bucket) {
+	// 检查用户是否有权限访问该桶（使用获取到的区域和存储桶）
+	if !auth.CheckBucketAccess(h.DB, c.GetUint("userID"), regionCode, file.Bucket) {
 		h.Error(c, utils.CodeForbidden, "没有权限访问该存储桶")
 		return
 	}

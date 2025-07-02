@@ -701,3 +701,76 @@ func (s *AliyunOSSService) GenerateDownloadURLWithBucket(objectKey string, downl
 	}
 	return signedURL, expires, nil
 }
+
+// DeleteObjectFromBucket 删除指定存储桶中的文件
+func (s *AliyunOSSService) DeleteObjectFromBucket(objectKey string, regionCode string, bucketName string) error {
+	logger.Info("开始删除指定存储桶中的文件",
+		zap.String("objectKey", objectKey),
+		zap.String("regionCode", regionCode),
+		zap.String("bucketName", bucketName))
+
+	// 验证输入参数
+	if objectKey == "" {
+		logger.Error("删除文件失败：对象键为空")
+		return fmt.Errorf("对象键不能为空")
+	}
+	if regionCode == "" {
+		logger.Error("删除文件失败：区域代码为空")
+		return fmt.Errorf("区域代码不能为空")
+	}
+	if bucketName == "" {
+		logger.Error("删除文件失败：存储桶名称为空")
+		return fmt.Errorf("存储桶名称不能为空")
+	}
+
+	// 获取正确的endpoint（考虑传输加速）
+	endpoint := s.getEndpoint(regionCode)
+
+	logger.Info("创建OSS客户端用于删除文件",
+		zap.String("endpoint", endpoint),
+		zap.String("regionCode", regionCode),
+		zap.Bool("transferAccelerate", s.config.TransferAccelerate.Enabled))
+
+	// 创建指定地域的客户端
+	client, err := oss.New(endpoint, s.config.AccessKeyID, s.config.AccessKeySecret)
+	if err != nil {
+		logger.Error("创建OSS客户端失败",
+			zap.String("endpoint", endpoint),
+			zap.String("regionCode", regionCode),
+			zap.Error(err))
+		return fmt.Errorf("创建OSS客户端失败: %w", err)
+	}
+
+	// 获取指定的存储桶
+	logger.Info("获取存储桶用于删除文件", zap.String("bucketName", bucketName))
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		logger.Error("获取存储桶失败",
+			zap.String("bucketName", bucketName),
+			zap.String("regionCode", regionCode),
+			zap.Error(err))
+		return fmt.Errorf("获取存储桶失败: %w", err)
+	}
+
+	// 删除文件
+	logger.Info("开始删除文件",
+		zap.String("objectKey", objectKey),
+		zap.String("bucketName", bucketName))
+
+	err = bucket.DeleteObject(objectKey)
+	if err != nil {
+		logger.Error("删除文件失败",
+			zap.String("objectKey", objectKey),
+			zap.String("bucketName", bucketName),
+			zap.String("regionCode", regionCode),
+			zap.Error(err))
+		return fmt.Errorf("删除文件失败: %w", err)
+	}
+
+	logger.Info("文件删除成功",
+		zap.String("objectKey", objectKey),
+		zap.String("bucketName", bucketName),
+		zap.String("regionCode", regionCode))
+
+	return nil
+}
