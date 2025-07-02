@@ -1008,16 +1008,16 @@ func (h *OSSFileHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	//storage, err := h.storageFactory.GetStorageService(config.StorageType)
-	//if err != nil {
-	//	h.Error(c, utils.CodeServerError, "获取存储服务失败")
-	//	return
-	//}
-	//
-	//if err := storage.DeleteObject(file.ObjectKey); err != nil {
-	//	h.Error(c, utils.CodeServerError, "删除文件失败")
-	//	return
-	//}
+	storage, err := h.storageFactory.GetStorageService(config.StorageType)
+	if err != nil {
+		h.Error(c, utils.CodeServerError, "获取存储服务失败")
+		return
+	}
+
+	if err := storage.DeleteObject(file.ObjectKey); err != nil {
+		h.Error(c, utils.CodeServerError, "删除文件失败")
+		return
+	}
 
 	if err := h.DB.Delete(&file).Error; err != nil {
 		h.Error(c, utils.CodeServerError, "删除文件记录失败")
