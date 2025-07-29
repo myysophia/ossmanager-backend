@@ -698,7 +698,7 @@ func (h *OSSFileHandler) saveFileRecord(c *gin.Context, config models.OSSConfig,
 		"object_key = ? AND bucket = ? AND status = ?",
 		objectKey, bucketName, "ACTIVE",
 	).Update("status", "REPLACED").Error; err != nil {
-		logger.Warn("标记旧文件记录失败", 
+		logger.Warn("标记旧文件记录失败",
 			zap.String("object_key", objectKey),
 			zap.Error(err),
 		)
@@ -766,7 +766,7 @@ func (h *OSSFileHandler) saveFileRecordForMultipart(c *gin.Context, config model
 		"object_key = ? AND bucket = ? AND status = ?",
 		objectKey, bucketName, "ACTIVE",
 	).Update("status", "REPLACED").Error; err != nil {
-		logger.Warn("标记旧文件记录失败", 
+		logger.Warn("标记旧文件记录失败",
 			zap.String("object_key", objectKey),
 			zap.Error(err),
 		)
@@ -937,7 +937,7 @@ func (h *OSSFileHandler) CompleteMultipartUpload(c *gin.Context) {
 	if expireTime <= 0 {
 		expireTime = 24 * 3600 // 默认24小时
 	}
-	expiresAt := time.Now().Add(time.Duration(expireTime) * time.Second)
+	//expiresAt := time.Now().Add(time.Duration(expireTime) * time.Second)
 
 	// 使用改进的文件记录保存逻辑
 	h.saveFileRecordForMultipart(c, config, req.ObjectKey, originalFilename, req.FileSize, req.BucketName, url)
@@ -1249,7 +1249,7 @@ func (h *OSSFileHandler) CheckDuplicateFile(c *gin.Context) {
 			existingPath = strings.Join(parts[:len(parts)-1], "/")
 		}
 	}
-	
+
 	h.Success(c, gin.H{
 		"exists":     true,
 		"object_key": objectKey,
@@ -1281,7 +1281,7 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 	expireHoursStr := c.Query("expire_hours")
 	var expireDuration time.Duration
 	var neverExpires bool = false
-	
+
 	if expireHoursStr != "" {
 		if expireHours, err := strconv.Atoi(expireHoursStr); err == nil {
 			switch expireHours {
@@ -1337,7 +1337,7 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 	// 动态生成下载链接
 	var downloadURL string
 	var expires time.Time
-	
+
 	if neverExpires {
 		// 永不过期：返回文件的原始下载链接（如果是公共访问的桶）或者使用一个很长的过期时间
 		if aliyunStorage, ok := storage.(*oss.AliyunOSSService); ok {
@@ -1383,15 +1383,15 @@ func (h *OSSFileHandler) GetDownloadURL(c *gin.Context) {
 		zap.Time("expires", expires))
 
 	response := gin.H{
-		"download_url": downloadURL,
+		"download_url":  downloadURL,
 		"never_expires": neverExpires,
 	}
-	
+
 	if !neverExpires {
 		response["expires"] = expires
 		response["expire_hours"] = int(expireDuration.Hours())
 	}
-	
+
 	h.Success(c, response)
 }
 
